@@ -41,7 +41,7 @@ if not GITHUB_TOKEN:
     raise ValueError("GITHUB_TOKEN не указан")
 
 # Конфигурация GitHub
-GITHUB_REPO = 'myusername/backend'  # Замените на ваш репозиторий
+GITHUB_REPO = 'yourusername/jump-cyborg-backend'  # Замените на ваш реальный репозиторий
 GITHUB_FILE_PATH = 'data/scores.json'
 GITHUB_API_URL = f'https://api.github.com/repos/{GITHUB_REPO}/contents/{GITHUB_FILE_PATH}'
 GITHUB_HEADERS = {
@@ -59,7 +59,32 @@ except Exception as e:
     logger.error(f"Ошибка инициализации Telegram Bot: {e}")
     raise
 
-# Функция для создания scores.json, если он не существует
+# Функция для создания папки data (пустой файл .gitkeep)
+def create_data_folder():
+    try:
+        logger.info("Попытка создания папки data через .gitkeep")
+        content = base64.b64encode(b''.encode('utf-8')).decode('utf-8')
+        payload = {
+            'message': 'Create data folder with .gitkeep',
+            'content': content,
+            'branch': 'main'
+        }
+        response = requests.put(
+            f'https://api.github.com/repos/{GITHUB_REPO}/contents/data/.gitkeep',
+            headers=GITHUB_HEADERS,
+            json=payload
+        )
+        if response.status_code in [200, 201]:
+            logger.info("Папка data успешно создана")
+            return True
+        else:
+            logger.error(f"Ошибка при создании папки data: {response.status_code} {response.text}")
+            return False
+    except Exception as e:
+        logger.error(f"Ошибка при создании папки data: {e}")
+        return False
+
+# Функция для создания scores.json
 def create_scores_file():
     try:
         logger.info("Попытка создания scores.json")
@@ -95,6 +120,16 @@ def get_scores_from_github():
             return scores, file_data['sha']
         elif response.status_code == 404:
             logger.warning("scores.json не найден, создаём новый")
+            # Проверяем существование папки data
+            folder_check = requests.get(
+                f'https://api.github.com/repos/{GITHUB_REPO}/contents/data',
+                headers=GITHUB_HEADERS
+            )
+            if folder_check.status_code == 404:
+                logger.info("Папка data не существует, создаём")
+                if not create_data_folder():
+                    logger.error("Не удалось создать папку data")
+                    return [], None
             sha = create_scores_file()
             return [], sha
         else:
