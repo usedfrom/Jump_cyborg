@@ -41,7 +41,7 @@ if not GITHUB_TOKEN:
     raise ValueError("GITHUB_TOKEN не указан")
 
 # Конфигурация GitHub
-GITHUB_REPO = 'yourusername/jump-cyborg-backend'  # Замените на ваш реальный репозиторий
+GITHUB_REPO = 'usedfrom/Jump_cyborg'  # Указан ваш реальный репозиторий
 GITHUB_FILE_PATH = 'data/scores.json'
 GITHUB_API_URL = f'https://api.github.com/repos/{GITHUB_REPO}/contents/{GITHUB_FILE_PATH}'
 GITHUB_HEADERS = {
@@ -49,6 +49,23 @@ GITHUB_HEADERS = {
     'Accept': 'application/vnd.github.v3+json',
     'User-Agent': 'JumpCyborgBot'
 }
+
+# Проверка GITHUB_TOKEN
+def validate_github_token():
+    try:
+        response = requests.get('https://api.github.com/user', headers=GITHUB_HEADERS)
+        if response.status_code == 200:
+            logger.info(f"GitHub токен валиден, пользователь: {response.json()['login']}")
+            return True
+        else:
+            logger.error(f"Недействительный GITHUB_TOKEN: {response.status_code} {response.text}")
+            return False
+    except Exception as e:
+        logger.error(f"Ошибка проверки GITHUB_TOKEN: {e}")
+        return False
+
+if not validate_github_token():
+    raise ValueError("Недействительный GITHUB_TOKEN, проверьте переменную окружения")
 
 # Инициализация бота
 try:
@@ -63,7 +80,7 @@ except Exception as e:
 def create_data_folder():
     try:
         logger.info("Попытка создания папки data через .gitkeep")
-        content = base64.b64encode(b''.encode('utf-8')).decode('utf-8')
+        content = base64.b64encode(b'').decode('utf-8')
         payload = {
             'message': 'Create data folder with .gitkeep',
             'content': content,
