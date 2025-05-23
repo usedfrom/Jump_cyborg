@@ -1,11 +1,11 @@
-# app.py
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from telegram import Bot, Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, ContextTypes
 import os
-import aiohttp
+import requests
 import json
+import time
 import asyncio
 import logging
 import base64
@@ -41,7 +41,7 @@ if not GITHUB_TOKEN:
     raise ValueError("GITHUB_TOKEN не указан")
 
 # Конфигурация GitHub
-GITHUB_REPO = 'usedfrom/Jump_cyborg'
+GITHUB_REPO = 'usedfrom/Jump_cyborg'  # Указан ваш реальный репозиторий
 GITHUB_FILE_PATH = 'data/scores.json'
 GITHUB_API_URL = f'https://api.github.com/repos/{GITHUB_REPO}/contents/{GITHUB_FILE_PATH}'
 GITHUB_HEADERS = {
@@ -51,24 +51,20 @@ GITHUB_HEADERS = {
 }
 
 # Проверка GITHUB_TOKEN
-async def validate_github_token():
-    async with aiohttp.ClientSession(headers=GITHUB_HEADERS) as session:
-        try:
-            async with session.get('https://api.github.com/user', timeout=10) as response:
-                if response.status == 200:
-                    user = await response.json()
-                    logger.info(f"GitHub токен валиден, пользователь: {user['login']}")
-                    return True
-                else:
-                    logger.error(f"Недействительный GITHUB_TOKEN: {response.status} {await response.text()}")
-                    return False
-        except Exception as e:
-            logger.error(f"Ошибка проверки GITHUB_TOKEN: {e}")
+def validate_github_token():
+    try:
+        response = requests.get('https://api.github.com/user', headers=GITHUB_HEADERS)
+        if response.status_code == 200:
+            logger.info(f"GitHub токен валиден, пользователь: {response.json()['login']}")
+            return True
+        else:
+            logger.error(f"Недействительный GITHUB_TOKEN: {response.status_code} {response.text}")
             return False
+    except Exception as e:
+        logger.error(f"Ошибка проверки GITHUB_TOKEN: {e}")
+        return False
 
-# Проверка токена при старте
-loop = asyncio.get_event_loop()
-if not loop.run_until_complete(validate_github_token()):
+if not validate_github_token():
     raise ValueError("Недействительный GITHUB_TOKEN, проверьте переменную окружения")
 
 # Инициализация бота
@@ -80,113 +76,108 @@ except Exception as e:
     logger.error(f"Ошибка инициализации Telegram Bot: {e}")
     raise
 
-# Функция для создания папки data
-async def create_data_folder():
-    async with aiohttp.ClientSession(headers=GITHUB_HEADERS) as session:
-        try:
-            logger.info("Попытка создания папки data через .gitkeep")
-            content = base64.b64encode(b'').decode('utf-8')
-            payload = {
-                'message': 'Create data folder with .gitkeep',
-                'content': content,
-                'branch': 'main'
-            }
-            async with session.put(
-                f'https://api.github.com/repos/{GITHUB_REPO}/contents/data/.gitkeep',
-                json=payload,
-                timeout=10
-            ) as response:
-                if response.status in [200, 201]:
-                    logger.info("Папка data успешно создана")
-                    return True
-                else:
-                    logger.error(f"Ошибка при создании папки data: {response.status} {await response.text()}")
-                    return False
-        except Exception as e:
-            logger.error(f"Ошибка при создании папки data: {e}")
+# Функция для создания папки data (пустой файл .gitkeep)
+def create_data_folder():
+    try:
+        logger.info("Попытка создания папки data через .gitkeep")
+        content = base64.b64encode(b'').decode('utf-8')
+        payload = {
+            'message': 'Create data folder with .gitkeep',
+            'content': content,
+            'branch': 'main'
+        }
+        response = requests.put(
+            f'https://api.github.com/repos/{GITHUB_REPO}/contents/data/.gitkeep',
+            headers=GITHUB_HEADERS,
+            json=payload
+        )
+        if response.status_code in [200, 201]:
+            logger.info("Папка data успешно создана")
+            return True
+        else:
+            logger.error(f"Ошибка при создании папки data: {response.status_code} {response.text}")
             return False
+    except Exception as e:
+        logger.error(f"Ошибка при создании папки data: {e}")
+        return False
 
 # Функция для создания scores.json
-async def create_scores_file():
-    async with aiohttp.ClientSession(headers=GITHUB_HEADERS) as session:
-        try:
-            logger.info("Попытка создания scores.json")
-            content = json.dumps([], indent=2)
-            encoded_content = base64.b64encode(content.encode('utf-8')).decode('utf-8')
-            payload = {
-                'message': 'Create scores.json',
-                'content': encoded_content,
-                'branch': 'main'
-            }
-            async with session.put(GITHUB_API_URL, json=payload, timeout=10) as response:
-                if response.status in [200, 201]:
-                    logger.info("Файл scores.json успешно создан")
-                    data = await response.json()
-                    return data['content']['sha']
-                else:
-                    logger.error(f"Ошибка при создании scores.json: {response.status} {await response.text()}")
-                    return None
-        except Exception as e:
-            logger.error(f"Ошибка при создании scores.json: {e}")
+def create_scores_file():
+    try:
+        logger.info("Попытка создания scores.json")
+        content = json.dumps([], indent=2)
+        encoded_content = base64.b64encode(content.encode('utf-8')).decode('utf-8')
+        payload = {
+            'message': 'Create scores.json',
+            'content': encoded_content,
+            'branch': 'main'
+        }
+        response = requests.put(GITHUB_API_URL, headers=GITHUB_HEADERS, json=payload)
+        if response.status_code in [200, 201]:
+            logger.info("Файл scores.json успешно создан")
+            return response.json()['content']['sha']
+        else:
+            logger.error(f"Ошибка при создании scores.json: {response.status_code} {response.text}")
             return None
+    except Exception as e:
+        logger.error(f"Ошибка при создании scores.json: {e}")
+        return None
 
 # Функция для получения содержимого JSON-файла из GitHub
-async def get_scores_from_github():
-    async with aiohttp.ClientSession(headers=GITHUB_HEADERS) as session:
-        try:
-            logger.info(f"Получение scores.json из {GITHUB_API_URL}")
-            async with session.get(GITHUB_API_URL, timeout=10) as response:
-                logger.info(f"Ответ GitHub: {response.status}")
-                if response.status == 200:
-                    file_data = await response.json()
-                    content = base64.b64decode(file_data['content']).decode('utf-8')
-                    scores = json.loads(content)
-                    logger.info(f"Получено записей: {len(scores)}")
-                    return scores, file_data['sha']
-                elif response.status == 404:
-                    logger.warning("scores.json не найден, создаём новый")
-                    async with session.get(
-                        f'https://api.github.com/repos/{GITHUB_REPO}/contents/data',
-                        timeout=10
-                    ) as folder_check:
-                        if folder_check.status == 404:
-                            logger.info("Папка data не существует, создаём")
-                            if not await create_data_folder():
-                                logger.error("Не удалось создать папку data")
-                                return [], None
-                    sha = await create_scores_file()
-                    return [], sha
-                else:
-                    logger.error(f"Ошибка при получении файла: {response.status} {await response.text()}")
+def get_scores_from_github():
+    try:
+        logger.info(f"Получение scores.json из {GITHUB_API_URL}")
+        response = requests.get(GITHUB_API_URL, headers=GITHUB_HEADERS)
+        logger.info(f"Ответ GitHub: {response.status_code}")
+        if response.status_code == 200:
+            file_data = response.json()
+            content = base64.b64decode(file_data['content']).decode('utf-8')
+            scores = json.loads(content)
+            logger.info(f"Получено записей: {len(scores)}")
+            return scores, file_data['sha']
+        elif response.status_code == 404:
+            logger.warning("scores.json не найден, создаём новый")
+            # Проверяем существование папки data
+            folder_check = requests.get(
+                f'https://api.github.com/repos/{GITHUB_REPO}/contents/data',
+                headers=GITHUB_HEADERS
+            )
+            if folder_check.status_code == 404:
+                logger.info("Папка data не существует, создаём")
+                if not create_data_folder():
+                    logger.error("Не удалось создать папку data")
                     return [], None
-        except Exception as e:
-            logger.error(f"Ошибка при получении файла: {e}")
+            sha = create_scores_file()
+            return [], sha
+        else:
+            logger.error(f"Ошибка при получении файла: {response.status_code} {response.text}")
             return [], None
+    except Exception as e:
+        logger.error(f"Ошибка при получении файла: {e}")
+        return [], None
 
 # Функция для сохранения JSON-файла в GitHub
-async def save_scores_to_github(scores, sha):
-    async with aiohttp.ClientSession(headers=GITHUB_HEADERS) as session:
-        try:
-            logger.info(f"Сохранение {len(scores)} записей в scores.json")
-            content = json.dumps(scores, indent=2)
-            encoded_content = base64.b64encode(content.encode('utf-8')).decode('utf-8')
-            payload = {
-                'message': 'Update scores.json',
-                'content': encoded_content,
-                'sha': sha if sha else None,
-                'branch': 'main'
-            }
-            async with session.put(GITHUB_API_URL, json=payload, timeout=10) as response:
-                if response.status in [200, 201]:
-                    logger.info("Файл scores.json успешно обновлён")
-                    data = await response.json()
-                    return data['content']['sha']
-                else:
-                    logger.error(f"Ошибка при сохранении файла: {response.status} {await response.text()}")
-                    return None
-        except Exception as e:
-            logger.error(f"Ошибка при сохранении файла: {e}")
+def save_scores_to_github(scores, sha):
+    try:
+        logger.info(f"Сохранение {len(scores)} записей в scores.json")
+        content = json.dumps(scores, indent=2)
+        encoded_content = base64.b64encode(content.encode('utf-8')).decode('utf-8')
+        payload = {
+            'message': 'Update scores.json',
+            'content': encoded_content,
+            'sha': sha if sha else None,
+            'branch': 'main'
+        }
+        response = requests.put(GITHUB_API_URL, headers=GITHUB_HEADERS, json=payload)
+        if response.status_code in [200, 201]:
+            logger.info("Файл scores.json успешно обновлён")
+            return response.json()['content']['sha']
+        else:
+            logger.error(f"Ошибка при сохранении файла: {response.status_code} {response.text}")
             return None
+    except Exception as e:
+        logger.error(f"Ошибка при сохранении файла: {e}")
+        return None
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"Команда /start от пользователя {update.effective_user.id}")
@@ -198,7 +189,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def top(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"Команда /top от пользователя {update.effective_user.id}")
     try:
-        scores, _ = await get_scores_from_github()
+        scores, _ = get_scores_from_github()
         logger.info(f"Получено {len(scores)} записей для /top")
         
         top_scores = sorted(scores, key=lambda x: x['score'], reverse=True)[:10]
@@ -253,7 +244,7 @@ async def webhook():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/save_score', methods=['POST'])
-async def save_score():
+def save_score():
     data = request.get_json()
     logger.info(f"Запрос /save_score: {json.dumps(data, indent=2)}")
     if not data or 'user_id' not in data or 'username' not in data or 'score' not in data:
@@ -265,8 +256,9 @@ async def save_score():
     score = data['score']
     
     try:
-        scores, sha = await get_scores_from_github()
+        scores, sha = get_scores_from_github()
         
+        # Проверяем, существует ли пользователь
         existing_entry = next((entry for entry in scores if entry['user_id'] == user_id), None)
         
         if existing_entry:
@@ -277,7 +269,7 @@ async def save_score():
             scores.append({'user_id': user_id, 'username': username, 'score': score})
             logger.info(f"Новый счёт: user_id={user_id}, username={username}, score={score}")
         
-        new_sha = await save_scores_to_github(scores, sha)
+        new_sha = save_scores_to_github(scores, sha)
         if new_sha:
             logger.info("Счёт успешно сохранён")
             return jsonify({'status': 'OK'})
@@ -289,14 +281,14 @@ async def save_score():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/get_leaderboard_with_rank', methods=['GET'])
-async def get_leaderboard_with_rank():
+def get_leaderboard_with_rank():
     logger.info("Запрос /get_leaderboard_with_rank")
     user_id = request.args.get('user_id', type=int)
     current_score = request.args.get('score', type=int, default=0)
     logger.info(f"Параметры: user_id={user_id}, score={current_score}")
     
     try:
-        scores, _ = await get_scores_from_github()
+        scores, _ = get_scores_from_github()
         logger.info(f"Получено {len(scores)} записей")
         
         top_scores = sorted(scores, key=lambda x: x['score'], reverse=True)[:10]
@@ -342,6 +334,7 @@ def main():
     application.add_handler(CommandHandler('top', top))
     application.add_handler(CommandHandler('help', help_command))
     
+    # Запускаем polling в асинхронной задаче
     loop = asyncio.get_event_loop()
     loop.create_task(run_polling_with_retry())
 
