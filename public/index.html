@@ -657,14 +657,19 @@
                 for (let i = 0; i < retries; i++) {
                     try {
                         console.log(`Запрос к ${url}, попытка ${i + 1}`);
-                        const response = await fetch(url);
+                        const response = await fetch(url, {
+                            method: 'GET',
+                            headers: { 'Accept': 'application/json' }
+                        });
                         if (response.status === 404) {
                             throw new Error('Сервер недоступен (404 Not Found). Проверьте деплой на Render.');
                         }
                         if (!response.ok) {
                             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                         }
-                        return await response.json();
+                        const data = await response.json();
+                        console.log(`Ответ от ${url}:`, JSON.stringify(data, null, 2));
+                        return data;
                     } catch (error) {
                         console.error(`Попытка ${i + 1} не удалась: ${error.message}`);
                         if (i < retries - 1) await new Promise(resolve => setTimeout(resolve, delay));
@@ -684,10 +689,9 @@
                     listElement.style.display = 'none';
                     const url = userId ? `${settings.leaderboardUrl}?user_id=${userId}&score=${currentScore}` : settings.leaderboardUrl;
                     const data = await fetchWithRetry(url);
-                    console.log(`Ответ лидерборда (${target}):`, JSON.stringify(data, null, 2));
                     
                     listElement.innerHTML = '';
-                    if (data.status === 'OK') {
+                    if (data && data.status === 'OK') {
                         if (!Array.isArray(data.leaderboard) || data.leaderboard.length === 0) {
                             const li = document.createElement('li');
                             li.textContent = 'Таблица лидеров пуста';
@@ -695,18 +699,22 @@
                             console.log(`Лидерборд пуст (${target})`);
                         } else {
                             data.leaderboard.slice(0, 10).forEach((entry, index) => {
-                                console.log(`Добавление записи (${target}): ${entry.username}, ${entry.score}`);
-                                const li = document.createElement('li');
-                                li.innerHTML = `<span class="rank">${index + 1}.</span> ${entry.username}: ${entry.score}`;
-                                listElement.appendChild(li);
+                                if (entry && entry.username && entry.score != null) {
+                                    console.log(`Добавление записи (${target}): ${entry.username}, ${entry.score}`);
+                                    const li = document.createElement('li');
+                                    li.innerHTML = `<span class="rank">${index + 1}.</span> ${entry.username}: ${entry.score}`;
+                                    listElement.appendChild(li);
+                                } else {
+                                    console.warn(`Некорректная запись в лидерборде (${target}):`, entry);
+                                }
                             });
                             if (target === 'game-over' || target === 'modal') {
-                                const highScore = Math.max(...data.leaderboard.map(entry => entry.score), 0);
+                                const highScore = Math.max(...data.leaderboard.map(entry => entry.score || 0), 0);
                                 highScoreElement.textContent = highScore;
                                 console.log(`Обновлён рекорд: ${highScore}`);
                             }
                         }
-                        if (data.user_rank) {
+                        if (data.user_rank != null) {
                             rankElement.textContent = `Вы на ${data.user_rank} месте с ${currentScore} очками`;
                             console.log(`Ранг игрока (${target}): ${data.user_rank}, счёт: ${currentScore}`);
                         } else {
@@ -714,12 +722,12 @@
                             console.log(`Ранг игрока не определён (${target})`);
                         }
                     } else {
-                        throw new Error(data.message || 'Неверный формат ответа');
+                        throw new Error(data && data.message ? data.message : 'Неверный формат ответа сервера');
                     }
                 } catch (error) {
                     console.error(`Ошибка при загрузке лидерборда (${target}): ${error.message}`);
                     listElement.innerHTML = `<li>Ошибка загрузки: ${error.message}</li>`;
-                    rankElement.textContent = '';
+                    rankElement.textContent = 'Не удалось загрузить ранг';
                 } finally {
                     loadingIndicator.style.display = 'none';
                     listElement.style.display = 'block';
