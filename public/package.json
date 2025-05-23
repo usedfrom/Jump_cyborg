@@ -1,0 +1,12 @@
+{
+  "name": "my-game",
+  "version": "1.0.0",
+  "description": "Platformer game with Telegram bot integration",
+  "main": "public/index.html",
+  "scripts": {
+    "start": "serve public"
+  },
+  "dependencies": {
+    "serve": "^14.2.3"
+  }
+}

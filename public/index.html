@@ -1,0 +1,1111 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Игра с платформами</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+            touch-action: none;
+            background: #000000;
+            height: 100vh;
+        }
+
+        #starfield {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100%;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        #character {
+            position: absolute;
+            width: 50px;
+            height: 50px;
+            background-size: cover;
+            z-index: 10;
+            transition: box-shadow 0.3s;
+        }
+
+        #character.facing-right {
+            background-image: url('./character-right.png');
+        }
+
+        #character.facing-left {
+            background-image: url('./character-left.png');
+        }
+
+        .platform {
+            position: absolute;
+            height: 10px;
+            background-color: #B0BEC5;
+            border: 2px solid #78909C;
+            border-radius: 5px;
+            z-index: 5;
+            opacity: 1;
+            box-shadow: 0 0 8px #2196F3;
+        }
+
+        .initial-platform {
+            background-color: #B0BEC5;
+            border: 2px dashed #78909C;
+            animation: pulse 1.5s infinite;
+            box-shadow: 0 0 8px #2196F3;
+        }
+
+        .disposable-platform {
+            position: absolute;
+            height: 10px;
+            background-color: #AB47BC;
+            border: 2px solid #7B1FA2;
+            border-radius: 5px;
+            z-index: 5;
+            opacity: 1;
+            animation: flicker 1s infinite;
+            box-shadow: 0 0 8px #7B1FA2;
+        }
+
+        .disposable-platform.crumbling {
+            animation: crumble 0.5s forwards;
+            pointer-events: none;
+            position: absolute;
+            will-change: transform;
+        }
+
+        .rocket {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            background-image: url('./rocket.png');
+            background-size: cover;
+            border-radius: 50%;
+            z-index: 8;
+            animation: rocket-pulse 0.8s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 0.8; }
+            50% { opacity: 1; }
+            100% { opacity: 0.8; }
+        }
+
+        @keyframes flicker {
+            0% { opacity: 0.9; }
+            50% { opacity: 1; }
+            100% { opacity: 0.9; }
+        }
+
+        @keyframes rocket-pulse {
+            0% { transform: scale(1); opacity: 0.7; }
+            50% { transform: scale(1.2); opacity: 1; }
+            100% { transform: scale(1); opacity: 0.7; }
+        }
+
+        @keyframes crumble {
+            0% {
+                transform: scale(1) translateY(0);
+                opacity: 1;
+            }
+            50% {
+                transform: scale(0.8) translateY(50px);
+                opacity: 0.7;
+            }
+            100% {
+                transform: scale(0.5) translateY(200px);
+                opacity: 0;
+            }
+        }
+
+        @keyframes fadeIn {
+            0% { opacity: 0; transform: translateY(20px); }
+            100% { opacity: 1; transform: translateY(0); }
+        }
+
+        #score {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            font-size: 24px;
+            color: #E0E0E0;
+            text-shadow: 1px 1px 2px #000000;
+            z-index: 100;
+        }
+
+        #game-over {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            color: #E0E0E0;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 200;
+        }
+
+        #game-over h2 {
+            font-size: 36px;
+            margin-bottom: 20px;
+        }
+
+        #restart {
+            padding: 10px 20px;
+            font-size: 20px;
+            background-color: #FF5722;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 20px;
+        }
+
+        #start-button {
+            position: fixed;
+            top: 40%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            padding: 15px 30px;
+            font-size: 20px;
+            background-color: #FF5722;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            z-index: 1000;
+            animation: fadeIn 0.5s ease-in;
+        }
+
+        #leaderboard-button {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            padding: 15px 30px;
+            font-size: 20px;
+            background-color: #FF5722;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            z-index: 1000;
+            animation: fadeIn 0.5s ease-in;
+        }
+
+        #telegram-login {
+            position: fixed;
+            top: 65%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 1000;
+        }
+
+        #leaderboard {
+            margin-top: 20px;
+            text-align: center;
+            max-width: 300px;
+            background: rgba(33, 33, 33, 0.9);
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+            animation: fadeIn 0.5s ease-in;
+        }
+
+        #leaderboard h3 {
+            font-size: 24px;
+            margin-bottom: 10px;
+            color: #FF5722;
+        }
+
+        #leaderboard ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        #leaderboard li {
+            font-size: 18px;
+            margin: 5px 0;
+            color: #E0E0E0;
+        }
+
+        #leaderboard li span.rank {
+            color: #FFCA28;
+            font-weight: bold;
+        }
+
+        #player-rank {
+            margin-top: 10px;
+            font-size: 18px;
+            color: #4CAF50;
+            font-weight: bold;
+        }
+
+        #leaderboard-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            color: #E0E0E0;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 200;
+        }
+
+        #leaderboard-modal h2 {
+            font-size: 36px;
+            margin-bottom: 20px;
+        }
+
+        #leaderboard-modal .leaderboard-content {
+            text-align: center;
+            max-width: 300px;
+            background: rgba(33, 33, 33, 0.9);
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+            animation: fadeIn 0.5s ease-in;
+        }
+
+        #leaderboard-modal .leaderboard-content h3 {
+            font-size: 24px;
+            margin-bottom: 10px;
+            color: #FF5722;
+        }
+
+        #leaderboard-modal .leaderboard-content ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        #leaderboard-modal .leaderboard-content li {
+            font-size: 18px;
+            margin: 5px 0;
+            color: #E0E0E0;
+        }
+
+        #leaderboard-modal .leaderboard-content li span.rank {
+            color: #FFCA28;
+            font-weight: bold;
+        }
+
+        #leaderboard-modal .leaderboard-content #modal-player-rank {
+            margin-top: 10px;
+            font-size: 18px;
+            color: #4CAF50;
+            font-weight: bold;
+        }
+
+        #close-leaderboard {
+            padding: 10px 20px;
+            font-size: 20px;
+            background-color: #FF5722;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="starfield"></canvas>
+    <div id="game-container">
+        <div id="character" class="facing-right"></div>
+        <div id="score">0</div>
+        <div id="game-over">
+            <h2>Игра окончена!</h2>
+            <p>Ваш счет: <span id="final-score">0</span></p>
+            <div id="leaderboard">
+                <h3>Таблица лидеров</h3>
+                <ul id="leaderboard-list"></ul>
+                <p id="player-rank"></p>
+            </div>
+            <button id="restart">Играть снова</button>
+        </div>
+        <div id="leaderboard-modal">
+            <h2>Доска лидеров</h2>
+            <div class="leaderboard-content">
+                <h3>Топ-10 игроков</h3>
+                <ul id="modal-leaderboard-list"></ul>
+                <p id="modal-player-rank"></p>
+            </div>
+            <button id="close-leaderboard">Закрыть</button>
+        </div>
+    </div>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const canvas = document.getElementById('starfield');
+            const ctx = canvas.getContext('2d');
+            let stars = [];
+
+            function resizeCanvas() {
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+            }
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
+
+            function createStar() {
+                return {
+                    x: Math.random() * canvas.width,
+                    y: Math.random() * canvas.height,
+                    radius: Math.random() * 1.5 + 0.5,
+                    opacity: Math.random() * 0.5 + 0.5,
+                    speed: Math.random() * 0.5 + 0.2
+                };
+            }
+
+            function initStars() {
+                stars = [];
+                for (let i = 0; i < 100; i++) {
+                    stars.push(createStar());
+                }
+            }
+
+            function animateStars() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                stars.forEach(star => {
+                    ctx.beginPath();
+                    ctx.arc(star.x, star.y, star.radius, 0, Math.PI * 2);
+                    ctx.fillStyle = `rgba(255, 255, 255, ${star.opacity})`;
+                    ctx.fill();
+                    star.y += star.speed;
+                    star.opacity += (Math.random() - 0.5) * 0.02;
+                    if (star.opacity < 0.2) star.opacity = 0.2;
+                    if (star.opacity > 1) star.opacity = 1;
+                    if (star.y > canvas.height) {
+                        star.y = 0;
+                        star.x = Math.random() * canvas.width;
+                    }
+                });
+                requestAnimationFrame(animateStars);
+            }
+
+            initStars();
+            animateStars();
+
+            const character = document.getElementById('character');
+            const gameContainer = document.getElementById('game-container');
+            const scoreElement = document.getElementById('score');
+            const gameOverScreen = document.getElementById('game-over');
+            const finalScoreElement = document.getElementById('final-score');
+            const restartButton = document.getElementById('restart');
+            const leaderboardList = document.getElementById('leaderboard-list');
+            const playerRankElement = document.getElementById('player-rank');
+            const leaderboardModal = document.getElementById('leaderboard-modal');
+            const modalLeaderboardList = document.getElementById('modal-leaderboard-list');
+            const modalPlayerRankElement = document.getElementById('modal-player-rank');
+            const closeLeaderboardButton = document.getElementById('close-leaderboard');
+
+            const settings = {
+                sensitivity: 0.3,
+                maxSpeed: 8,
+                gravity: 0.5,
+                jumpForce: -12,
+                gameStartDelay: 60,
+                maxHorizontalDistance: 120,
+                maxVerticalDistance: 100,
+                minVerticalDistance: 60,
+                platformWidthMin: 50,
+                platformWidthMax: 200,
+                minPlatformGap: 40,
+                cameraFollowThreshold: window.innerHeight / 3,
+                gameOverMargin: 200,
+                maxPlatforms: 10,
+                platformSpawnThreshold: window.innerHeight / 2,
+                disposablePlatformMinChance: 0.1,
+                disposablePlatformMaxChance: 0.5,
+                disposablePlatformScoreMax: 50,
+                rocketChance: 0.05,
+                rocketJumpMin: 2,
+                rocketJumpMax: 6,
+                rocketJumpForceMultiplier: 2.0,
+                rocketGravityMultiplier: 0.5,
+                initialWidthChance: 0.2,
+                apiUrl: 'https://jump-cyborg.onrender.com/save_score',
+                leaderboardUrl: 'https://jump-cyborg.onrender.com/get_leaderboard_with_rank',
+                botUsername: '@JumpBot'
+            };
+
+            let score = 0;
+            let isGameOver = false;
+            let isGameStarted = false;
+            let platforms = [];
+            let characterX = window.innerWidth / 2 - 20;
+            let characterY = window.innerHeight - 100;
+            let characterVelocityX = 0;
+            let characterVelocityY = 0;
+            let cameraY = 0;
+            let gameStartDelay = settings.gameStartDelay;
+            let lastSide = 'center';
+            let rocketMode = false;
+            let rocketJumpsRemaining = 0;
+            let currentJumpForce = settings.jumpForce;
+            let currentGravity = settings.gravity;
+            let lastDestroyedPlatform = null;
+            let user = null;
+            let leaderboardInterval = null;
+
+            if (window.Telegram && window.Telegram.WebApp) {
+                window.Telegram.WebApp.ready();
+                console.log('Telegram WebApp инициализирован');
+                console.log('initData:', window.Telegram.WebApp.initData);
+                user = window.Telegram.WebApp.initDataUnsafe.user;
+                console.log('Пользователь:', user);
+            } else {
+                console.log('Telegram WebApp не доступен');
+            }
+
+            async function fetchWithRetry(url, retries = 3, delay = 1000) {
+                for (let i = 0; i < retries; i++) {
+                    try {
+                        console.log(`Запрос к ${url}, попытка ${i + 1}`);
+                        const response = await fetch(url);
+                        if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                        return await response.json();
+                    } catch (error) {
+                        console.error(`Попытка ${i + 1} не удалась:`, error.message);
+                        if (i < retries - 1) await new Promise(resolve => setTimeout(resolve, delay));
+                    }
+                }
+                throw new Error('Не удалось выполнить запрос');
+            }
+
+            async function fetchLeaderboard(userId, currentScore, target = 'game-over') {
+                try {
+                    const url = userId ? `${settings.leaderboardUrl}?user_id=${userId}&score=${currentScore}` : settings.leaderboardUrl;
+                    console.log(`Запрос лидерборда (${target}):`, url);
+                    const data = await fetchWithRetry(url);
+                    console.log(`Ответ лидерборда (${target}):`, JSON.stringify(data, null, 2));
+                    
+                    const listElement = target === 'game-over' ? leaderboardList : modalLeaderboardList;
+                    const rankElement = target === 'game-over' ? playerRankElement : modalPlayerRankElement;
+                    listElement.innerHTML = '';
+                    
+                    if (data.status === 'OK') {
+                        if (!Array.isArray(data.leaderboard) || data.leaderboard.length === 0) {
+                            const li = document.createElement('li');
+                            li.textContent = 'Таблица лидеров пуста';
+                            listElement.appendChild(li);
+                            console.log(`Лидерборд пуст (${target})`);
+                        } else {
+                            data.leaderboard.forEach((entry, index) => {
+                                console.log(`Добавление записи (${target}): ${entry.username}, ${entry.score}`);
+                                const li = document.createElement('li');
+                                li.innerHTML = `<span class="rank">${index + 1}.</span> ${entry.username}: ${entry.score}`;
+                                listElement.appendChild(li);
+                            });
+                        }
+                        if (data.user_rank) {
+                            rankElement.textContent = `Вы на ${data.user_rank} месте с ${currentScore} очками`;
+                            console.log(`Ранг игрока (${target}): ${data.user_rank}, счёт: ${currentScore}`);
+                        } else {
+                            rankElement.textContent = 'У вас пока нет результатов';
+                            console.log(`Ранг игрока не определён (${target})`);
+                        }
+                    } else {
+                        throw new Error(data.message || 'Неверный формат ответа');
+                    }
+                } catch (error) {
+                    console.error(`Ошибка при загрузке лидерборда (${target}):`, error.message);
+                    listElement.innerHTML = '<li>Не удалось загрузить таблицу лидеров</li>';
+                    rankElement.textContent = '';
+                }
+            }
+
+            async function sendScoreToServer(score) {
+                if (!user || !user.id) {
+                    console.warn('Пользователь не авторизован, счёт не отправлен');
+                    return;
+                }
+                try {
+                    const payload = {
+                        user_id: user.id,
+                        username: user.username || user.first_name || 'Unknown',
+                        score: score
+                    };
+                    console.log('Отправка счёта:', JSON.stringify(payload, null, 2));
+                    const response = await fetch(settings.apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    const result = await response.json();
+                    console.log('Результат отправки счёта:', JSON.stringify(result, null, 2));
+                    if (result.status === 'OK') {
+                        console.log('Счёт успешно сохранён, запрашиваем лидерборд');
+                        await fetchLeaderboard(user.id, score, 'game-over');
+                    } else {
+                        console.error('Ошибка сервера:', result.message);
+                    }
+                } catch (error) {
+                    console.error('Ошибка при отправке счёта:', error.message);
+                }
+            }
+
+            function startLeaderboardPolling(target, userId, score) {
+                if (leaderboardInterval) {
+                    clearInterval(leaderboardInterval);
+                    console.log('Предыдущий polling лидерборда остановлен');
+                }
+                leaderboardInterval = setInterval(() => {
+                    console.log(`Polling: обновление лидерборда (${target})`);
+                    fetchLeaderboard(userId, score, target);
+                }, 10000);
+                console.log(`Polling лидерборда запущен (${target})`);
+            }
+
+            function stopLeaderboardPolling() {
+                if (leaderboardInterval) {
+                    clearInterval(leaderboardInterval);
+                    leaderboardInterval = null;
+                    console.log('Polling лидерборда остановлен');
+                }
+            }
+
+            function initGame() {
+                score = 0;
+                isGameOver = false;
+                isGameStarted = true;
+                platforms = [];
+                characterX = window.innerWidth / 2 - 20;
+                characterY = window.innerHeight - 100;
+                characterVelocityX = 0;
+                characterVelocityY = 0;
+                cameraY = 0;
+                gameStartDelay = settings.gameStartDelay;
+                lastSide = 'center';
+                rocketMode = false;
+                rocketJumpsRemaining = 0;
+                currentJumpForce = settings.jumpForce;
+                currentGravity = settings.gravity;
+                lastDestroyedPlatform = null;
+                character.classList.remove('rocket-mode', 'facing-left');
+                character.classList.add('facing-right');
+
+                scoreElement.textContent = score;
+                gameOverScreen.style.display = 'none';
+                leaderboardList.innerHTML = '';
+                playerRankElement.textContent = '';
+                leaderboardModal.style.display = 'none';
+
+                stopLeaderboardPolling();
+
+                document.querySelectorAll('.platform, .disposable-platform, .rocket').forEach(p => p.remove());
+
+                createInitialPlatform();
+                for (let i = 0; i < 7; i++) {
+                    createPlatform();
+                }
+
+                updatePositions();
+                requestAnimationFrame(gameLoop);
+            }
+
+            function createInitialPlatform() {
+                const platform = document.createElement('div');
+                platform.className = 'platform initial-platform';
+                const platformWidth = 100;
+                const platformX = (window.innerWidth - platformWidth) / 2;
+                const platformY = window.innerHeight - 50;
+
+                platform.style.width = `${platformWidth}px`;
+                platform.style.left = `${platformX}px`;
+                platform.style.top = `${platformY}px`;
+
+                gameContainer.appendChild(platform);
+                platforms.push({
+                    element: platform,
+                    x: platformX,
+                    y: platformY,
+                    width: platformWidth,
+                    height: 10,
+                    isNew: false,
+                    isDisposable: false,
+                    hasRocket: false,
+                    isDestroyed: false
+                });
+            }
+
+            function isOverlapping(x, y, width) {
+                return platforms.some(platform => {
+                    if (platform.isDestroyed) return false;
+                    const dx = Math.abs((x + width / 2) - (platform.x + platform.width / 2));
+                    const dy = Math.abs(y - platform.y);
+                    return dx < (width + platform.width) / 2 + settings.minPlatformGap && dy < settings.minVerticalDistance;
+                }) || (lastDestroyedPlatform && Math.abs(x - lastDestroyedPlatform.x) < settings.minPlatformGap && Math.abs(y - lastDestroyedPlatform.y) < settings.minVerticalDistance);
+            }
+
+            function createPlatform() {
+                const platform = document.createElement('div');
+                const disposableChance = Math.min(
+                    settings.disposablePlatformMaxChance,
+                    settings.disposablePlatformMinChance +
+                    (settings.disposablePlatformMaxChance - settings.disposablePlatformMinChance) *
+                    (score / settings.disposablePlatformScoreMax)
+                );
+                const isDisposable = Math.random() < disposableChance;
+                platform.className = isDisposable ? 'disposable-platform' : 'platform';
+
+                let minWidth, maxWidth;
+                const isInitialRange = Math.random() < settings.initialWidthChance;
+                if (isInitialRange) {
+                    minWidth = settings.platformWidthMin;
+                    maxWidth = settings.platformWidthMax;
+                } else {
+                    const heightFactor = Math.max(0, (window.innerHeight - characterY) / 2500);
+                    minWidth = Math.max(40, settings.platformWidthMin - heightFactor * 10);
+                    maxWidth = Math.max(120, settings.platformWidthMax - heightFactor * 80);
+                }
+
+                let platformWidth;
+                const rand = Math.random();
+                if (rand < 0.3) {
+                    platformWidth = minWidth + Math.random() * 20;
+                } else if (rand < 0.7) {
+                    platformWidth = minWidth + 20 + Math.random() * (maxWidth - minWidth - 20);
+                } else {
+                    platformWidth = maxWidth - 20 + Math.random() * 20;
+                }
+
+                let platformX, platformY;
+                let attempts = 0;
+                const maxAttempts = 10;
+
+                const isLeftSide = lastSide === 'right' || (lastSide === 'center' && Math.random() < 0.5);
+                lastSide = isLeftSide ? 'left' : 'right';
+
+                do {
+                    if (isLeftSide) {
+                        platformX = 20 + Math.random() * (window.innerWidth / 2 - platformWidth - 40);
+                    } else {
+                        platformX = window.innerWidth / 2 + 20 + Math.random() * (window.innerWidth / 2 - platformWidth - 40);
+                    }
+
+                    const minPlatformY = platforms.length > 0 ? Math.min(...platforms.map(p => p.y)) : window.innerHeight - 50;
+                    platformY = minPlatformY - (settings.minVerticalDistance + Math.random() * (settings.maxVerticalDistance - settings.minVerticalDistance));
+
+                    attempts++;
+                    if (attempts > maxAttempts) {
+                        platformX = isLeftSide ? 20 : window.innerWidth - platformWidth - 20;
+                        platformY = minPlatformY - settings.minVerticalDistance;
+                        break;
+                    }
+                } while (isOverlapping(platformX, platformY, platformWidth));
+
+                platform.style.width = `${platformWidth}px`;
+                platform.style.left = `${platformX}px`;
+                platform.style.top = `${platformY + cameraY}px`;
+
+                const hasRocket = Math.random() < settings.rocketChance;
+                let rocketElement = null;
+                if (hasRocket) {
+                    rocketElement = document.createElement('div');
+                    rocketElement.className = 'rocket';
+                    rocketElement.style.left = `${platformX + platformWidth / 2 - 10}px`;
+                    rocketElement.style.top = `${platformY + cameraY - 20}px`;
+                    gameContainer.appendChild(rocketElement);
+                }
+
+                gameContainer.appendChild(platform);
+                platforms.push({
+                    element: platform,
+                    x: platformX,
+                    y: platformY,
+                    width: platformWidth,
+                    height: 10,
+                    isNew: true,
+                    isDisposable: isDisposable,
+                    hasRocket: hasRocket,
+                    rocketElement: rocketElement,
+                    isDestroyed: false
+                });
+            }
+
+            function updatePositions() {
+                const characterScreenY = characterY + cameraY;
+                if (characterScreenY < settings.cameraFollowThreshold) {
+                    cameraY = -(characterY - settings.cameraFollowThreshold);
+                }
+                cameraY = Math.max(cameraY, 0);
+
+                character.style.left = `${characterX}px`;
+                character.style.top = `${characterY + cameraY}px`;
+
+                platforms.forEach(platform => {
+                    if (platform.isDestroyed) return;
+                    const screenY = platform.y + cameraY;
+                    platform.element.style.left = `${platform.x}px`;
+                    platform.element.style.top = `${screenY}px`;
+                    if (platform.hasRocket && platform.rocketElement) {
+                        platform.rocketElement.style.left = `${platform.x + platform.width / 2 - 10}px`;
+                        platform.rocketElement.style.top = `${screenY - 20}px`;
+                    }
+                });
+            }
+
+            function checkCollisions() {
+                if (characterX < 0) {
+                    characterX = 0;
+                    characterVelocityX = 0;
+                }
+                if (characterX > window.innerWidth - 40) {
+                    characterX = window.innerWidth - 40;
+                    characterVelocityX = 0;
+                }
+
+                if (gameStartDelay > 0 || platforms.length === 0) return;
+
+                const lowestPlatformY = Math.max(...platforms.map(p => p.y));
+                if (characterY > lowestPlatformY + settings.gameOverMargin) {
+                    gameOver();
+                    return;
+                }
+
+                let onPlatform = false;
+                for (let i = 0; i < platforms.length; i++) {
+                    const platform = platforms[i];
+                    if (platform.isDestroyed) continue;
+
+                    if (platform.hasRocket && platform.rocketElement) {
+                        const rocketX = platform.x + platform.width / 2 - 10;
+                        const rocketY = platform.y - 20;
+                        if (
+                            characterX + 40 > rocketX &&
+                            characterX < rocketX + 20 &&
+                            characterY + 40 > rocketY &&
+                            characterY < rocketY + 20
+                        ) {
+                            platform.hasRocket = false;
+                            platform.rocketElement.remove();
+                            platform.rocketElement = null;
+                            rocketMode = true;
+                            rocketJumpsRemaining = Math.floor(Math.random() * (settings.rocketJumpMax - settings.rocketJumpMin + 1)) + settings.rocketJumpMin;
+                            currentJumpForce = settings.jumpForce * settings.rocketJumpForceMultiplier;
+                            currentGravity = settings.gravity * settings.rocketGravityMultiplier;
+                            character.classList.add('rocket-mode');
+                        }
+                    }
+
+                    if (
+                        characterY + 40 >= platform.y &&
+                        characterY + 40 <= platform.y + platform.height + 5 &&
+                        characterX + 40 > platform.x &&
+                        characterX < platform.x + platform.width &&
+                        characterVelocityY >= 0
+                    ) {
+                        characterY = platform.y - 40;
+                        characterVelocityY = currentJumpForce;
+                        onPlatform = true;
+                        if (platform.isNew) {
+                            score++;
+                            scoreElement.textContent = score;
+                            platform.isNew = false;
+                        }
+                        if (platform.isDisposable) {
+                            platform.isDestroyed = true;
+                            lastDestroyedPlatform = { x: platform.x, y: platform.y };
+                            platform.element.classList.add('crumbling');
+                            if (platform.hasRocket && platform.rocketElement) {
+                                platform.rocketElement.remove();
+                                platform.hasRocket = false;
+                            }
+                            const domElement = platform.element;
+                            platforms.splice(i, 1);
+                            i--;
+                            setTimeout(() => {
+                                domElement.remove();
+                            }, 500);
+                        }
+                        if (rocketMode) {
+                            rocketJumpsRemaining--;
+                            if (rocketJumpsRemaining <= 0) {
+                                rocketMode = false;
+                                currentJumpForce = settings.jumpForce;
+                                currentGravity = settings.gravity;
+                                character.classList.remove('rocket-mode');
+                            }
+                        }
+                        break;
+                    }
+                }
+
+                if (!onPlatform) {
+                    characterVelocityY += currentGravity;
+                }
+            }
+
+            function gameOver() {
+                isGameOver = true;
+                finalScoreElement.textContent = score;
+                gameOverScreen.style.display = 'flex';
+                sendScoreToServer(score);
+                if (user && user.id) {
+                    startLeaderboardPolling('game-over', user.id, score);
+                }
+            }
+
+            function gameLoop() {
+                if (isGameOver) return;
+
+                characterX += characterVelocityX;
+                characterY += characterVelocityY;
+
+                if (characterVelocityX > 0) {
+                    character.classList.remove('facing-left');
+                    character.classList.add('facing-right');
+                } else if (characterVelocityX < 0) {
+                    character.classList.remove('facing-right');
+                    character.classList.add('facing-left');
+                }
+
+                checkCollisions();
+                updatePositions();
+
+                platforms = platforms.filter(platform => {
+                    if (platform.y + cameraY < window.innerHeight + 100 && !platform.isDestroyed) {
+                        return true;
+                    }
+                    if (platform.hasRocket && platform.rocketElement) {
+                        platform.rocketElement.remove();
+                    }
+                    if (!platform.isDestroyed) {
+                        platform.element.remove();
+                    }
+                    return false;
+                });
+
+                let minPlatformY = platforms.length > 0 ? Math.min(...platforms.map(p => p.y)) : window.innerHeight - 50;
+                while (minPlatformY > cameraY + settings.platformSpawnThreshold || platforms.length < settings.maxPlatforms) {
+                    createPlatform();
+                    minPlatformY = Math.min(...platforms.map(p => p.y));
+                }
+
+                if (gameStartDelay > 0) {
+                    gameStartDelay--;
+                }
+
+                requestAnimationFrame(gameLoop);
+            }
+
+            function handleDeviceOrientation(event) {
+                if (!isGameStarted) return;
+                const gamma = event.gamma;
+                if (gamma === null) return;
+
+                let targetVelocity = gamma * settings.sensitivity;
+                targetVelocity = Math.max(-settings.maxSpeed, Math.min(settings.maxSpeed, targetVelocity));
+                characterVelocityX = lerp(characterVelocityX, targetVelocity, 0.2);
+                character.style.transform = `rotate(${targetVelocity * 2}deg)`;
+
+                if (characterVelocityX > 0) {
+                    character.classList.remove('facing-left');
+                    character.classList.add('facing-right');
+                } else if (characterVelocityX < 0) {
+                    character.classList.remove('facing-right');
+                    character.classList.add('facing-left');
+                }
+            }
+
+            function lerp(start, end, amt) {
+                return (1 - amt) * start + amt * end;
+            }
+
+            function initControls() {
+                const startButton = document.createElement('button');
+                startButton.id = 'start-button';
+                startButton.textContent = 'Войти через Telegram';
+                document.body.appendChild(startButton);
+
+                const leaderboardButton = document.createElement('button');
+                leaderboardButton.id = 'leaderboard-button';
+                leaderboardButton.textContent = 'Доска лидеров';
+                leaderboardButton.style.display = 'none'; // Скрыта до авторизации
+                document.body.appendChild(leaderboardButton);
+
+                const telegramLoginDiv = document.createElement('div');
+                telegramLoginDiv.id = 'telegram-login';
+                document.body.appendChild(telegramLoginDiv);
+
+                window.TelegramLoginWidget = {
+                    dataOnauth: (userData) => {
+                        console.log('Telegram Login авторизация:', JSON.stringify(userData, null, 2));
+                        fetch('https://jump-cyborg.onrender.com/telegram_login', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(userData)
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            console.log('Ответ /telegram_login:', JSON.stringify(data, null, 2));
+                            if (data.status === 'OK' && data.user) {
+                                user = data.user;
+                                startButton.remove();
+                                telegramLoginDiv.remove();
+                                leaderboardButton.style.display = 'block';
+                                startGame();
+                            } else {
+                                console.error('Ошибка авторизации:', data.message);
+                                alert('Не удалось авторизоваться. Попробуйте снова.');
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Ошибка запроса /telegram_login:', error.message);
+                            alert('Ошибка сервера. Попробуйте снова.');
+                        });
+                    }
+                };
+
+                const script = document.createElement('script');
+                script.src = 'https://telegram.org/js/telegram-widget.js';
+                script.setAttribute('data-telegram-login', '@JumpBot');
+                script.setAttribute('data-size', 'large');
+                script.setAttribute('data-onauth', 'TelegramLoginWidget.dataOnauth(user)');
+                script.async = true;
+                telegramLoginDiv.appendChild(script);
+
+                startButton.addEventListener('click', () => {
+                    console.log('Кнопка "Войти через Telegram" нажата');
+                    if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initData) {
+                        window.Telegram.WebApp.ready();
+                        user = window.Telegram.WebApp.initDataUnsafe.user;
+                        console.log('WebApp пользователь:', JSON.stringify(user, null, 2));
+                        if (user && user.id) {
+                            startButton.remove();
+                            telegramLoginDiv.remove();
+                            leaderboardButton.style.display = 'block';
+                            startGame();
+                        } else {
+                            console.error('WebApp: пользователь не определён');
+                            alert('Не удалось авторизоваться. Откройте через Telegram или используйте Telegram Login.');
+                        }
+                    } else {
+                        console.log('WebApp недоступен, требуется Telegram Login');
+                        alert('Используйте кнопку Telegram Login ниже.');
+                    }
+                });
+
+                leaderboardButton.addEventListener('click', () => {
+                    console.log('Кнопка "Доска лидеров" нажата');
+                    if (!user || !user.id) {
+                        alert('Пожалуйста, авторизуйтесь через Telegram.');
+                        return;
+                    }
+                    leaderboardModal.style.display = 'flex';
+                    fetchLeaderboard(user.id, 0, 'modal');
+                    startLeaderboardPolling('modal', user.id, 0);
+                });
+
+                closeLeaderboardButton.addEventListener('click', () => {
+                    leaderboardModal.style.display = 'none';
+                    stopLeaderboardPolling();
+                });
+            }
+
+            function startGame() {
+                if (window.DeviceOrientationEvent && typeof DeviceOrientationEvent.requestPermission === 'function') {
+                    DeviceOrientationEvent.requestPermission()
+                        .then(response => {
+                            if (response === 'granted') {
+                                window.addEventListener('deviceorientation', handleDeviceOrientation);
+                                setupTouchControls();
+                                initGame();
+                            } else {
+                                alert('Гироскоп не разрешён. Используйте касания.');
+                                setupTouchControls();
+                                initGame();
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Ошибка гироскопа:', error.message);
+                            setupTouchControls();
+                            initGame();
+                        });
+                } else {
+                    window.addEventListener('deviceorientation', handleDeviceOrientation);
+                    setupTouchControls();
+                    initGame();
+                }
+            }
+
+            function setupTouchControls() {
+                let touchStartX = 0;
+                document.addEventListener('touchstart', e => {
+                    touchStartX = e.touches[0].clientX;
+                });
+                document.addEventListener('touchmove', e => {
+                    const touchX = e.touches[0].clientX;
+                    characterVelocityX = (touchX - touchStartX) * 0.1;
+                    touchStartX = touchX;
+                    e.preventDefault();
+                    if (characterVelocityX > 0) {
+                        character.classList.remove('facing-left');
+                        character.classList.add('facing-right');
+                    } else if (characterVelocityX < 0) {
+                        character.classList.remove('facing-right');
+                        character.classList.add('facing-left');
+                    }
+                });
+                document.addEventListener('touchend', () => {
+                    characterVelocityX = 0;
+                    character.classList.remove('facing-left', 'facing-right');
+                    character.classList.add('facing-right');
+                });
+            }
+
+            function setupKeyboardControls() {
+                window.addEventListener('keydown', e => {
+                    if (e.key === 'ArrowLeft') {
+                        characterVelocityX = -6;
+                        character.classList.remove('facing-right');
+                        character.classList.add('facing-left');
+                    }
+                    if (e.key === 'ArrowRight') {
+                        characterVelocityX = 6;
+                        character.classList.remove('facing-left');
+                        character.classList.add('facing-right');
+                    }
+                });
+                window.addEventListener('keyup', e => {
+                    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+                        characterVelocityX = 0;
+                        character.classList.remove('facing-left', 'facing-right');
+                        character.classList.add('facing-right');
+                    }
+                });
+            }
+
+            restartButton.addEventListener('click', () => {
+                initGame();
+            });
+
+            setupKeyboardControls();
+            initControls();
+        });
+    </script>
+</body>
+</html>
