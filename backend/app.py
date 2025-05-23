@@ -5,8 +5,6 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 import os
 import requests
 import json
-import hashlib
-import hmac
 import time
 import asyncio
 import logging
@@ -60,30 +58,6 @@ try:
 except Exception as e:
     logger.error(f"Ошибка инициализации Telegram Bot: {e}")
     raise
-
-# Проверка Telegram Login
-def check_telegram_auth(data):
-    received_hash = data.get('hash')
-    if not received_hash:
-        logger.error("Отсутствует hash в данных Telegram Login")
-        return False
-    
-    data_check = sorted([(k, v) for k, v in data.items() if k != 'hash' and v])
-    data_check_string = '\n'.join(f'{k}={v}' for k, v in data_check)
-    
-    secret_key = hashlib.sha256(BOT_TOKEN.encode()).digest()
-    computed_hash = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
-    
-    if computed_hash != received_hash:
-        logger.error("Неверная подпись Telegram Login")
-        return False
-    
-    auth_date = int(data.get('auth_date', 0))
-    if time.time() - auth_date > 86400:
-        logger.error("Устаревшая авторизация Telegram Login")
-        return False
-    
-    return True
 
 # Функция для создания scores.json, если он не существует
 def create_scores_file():
@@ -196,6 +170,19 @@ async def top(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Ошибка при /top: {e}")
         await update.message.reply_text('Ошибка загрузки лидерборда. Попробуйте позже.')
 
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info(f"Команда /help от пользователя {update.effective_user.id}")
+    message = (
+        "🎮 *JumpBot* — бот для игры Jump Cyborg!\n\n"
+        "Доступные команды:\n"
+        "/start — Начать игру, открывает ссылку на игру.\n"
+        "/top — Показать таблицу лидеров (топ-10 игроков).\n"
+        "/help — Показать это сообщение.\n\n"
+        f"Играйте на: {WEBAPP_URL}"
+    )
+    await update.message.reply_text(message, parse_mode='MarkdownV2')
+    logger.info("Сообщение /help отправлено")
+
 @app.route('/webhook', methods=['POST'])
 async def webhook():
     try:
@@ -274,33 +261,35 @@ def get_leaderboard_with_rank():
         logger.error(f"Ошибка при /get_leaderboard_with_rank: {e}")
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
-@app.route('/telegram_login', methods=['POST'])
-def telegram_login():
-    data = request.get_json()
-    logger.info(f"Запрос /telegram_login: {json.dumps(data, indent=2)}")
+async def run_polling_with_retry():
+    max_retries = 5
+    retry_delay = 10  # секунд
+    attempt = 0
     
-    if not check_telegram_auth(data):
-        logger.error("Неверная авторизация Telegram")
-        return jsonify({'status': 'error', 'message': 'Invalid Telegram auth'}), 400
-    
-    user = {
-        'id': data['id'],
-        'username': data.get('username', data.get('first_name', 'Unknown')),
-        'first_name': data.get('first_name', ''),
-        'last_name': data.get('last_name', '')
-    }
-    logger.info(f"Успешная авторизация: {json.dumps(user, indent=2)}")
-    return jsonify({'status': 'OK', 'user': user})
+    while attempt < max_retries:
+        try:
+            logger.info(f"Запуск polling, попытка {attempt + 1}")
+            await application.run_polling()
+            logger.info("Polling Telegram Bot успешно запущен")
+            break
+        except Exception as e:
+            attempt += 1
+            logger.error(f"Ошибка при запуске polling (попытка {attempt}): {e}")
+            if attempt < max_retries:
+                logger.info(f"Повторная попытка через {retry_delay} секунд")
+                await asyncio.sleep(retry_delay)
+            else:
+                logger.error("Достигнуто максимальное количество попыток, polling не запущен")
+                raise
 
 def main():
     application.add_handler(CommandHandler('start', start))
     application.add_handler(CommandHandler('top', top))
-    try:
-        application.run_polling()
-        logger.info("Polling Telegram Bot запущен")
-    except Exception as e:
-        logger.error(f"Ошибка при запуске polling: {e}")
-        raise
+    application.add_handler(CommandHandler('help', help_command))
+    
+    # Запускаем polling в асинхронной задаче
+    loop = asyncio.get_event_loop()
+    loop.create_task(run_polling_with_retry())
 
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 10000))
