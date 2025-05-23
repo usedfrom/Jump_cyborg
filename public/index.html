@@ -283,12 +283,6 @@
             color: #E0E0E0;
         }
 
-        #leaderboard li.current-user {
-            background-color: rgba(76, 175, 80, 0.2);
-            border-radius: 5px;
-            padding: 5px;
-        }
-
         #leaderboard li span.rank {
             color: #FFCA28;
             font-weight: bold;
@@ -348,12 +342,6 @@
             font-size: 18px;
             margin: 5px 0;
             color: #E0E0E0;
-        }
-
-        #leaderboard-modal .leaderboard-content li.current-user {
-            background-color: rgba(76, 175, 80, 0.2);
-            border-radius: 5px;
-            padding: 5px;
         }
 
         #leaderboard-modal .leaderboard-content li span.rank {
@@ -597,6 +585,7 @@
             let currentGravity = settings.gravity;
             let lastDestroyedPlatform = null;
             let user = null;
+            let leaderboardInterval = null;
             let isGyroEnabled = false;
 
             function showGyroMessage(message) {
@@ -617,10 +606,58 @@
                     window.Telegram.WebApp.ready();
                     console.log('Telegram WebApp инициализирован');
                     console.log('initData:', window.Telegram.WebApp.initData);
-                    user = window.Telegram.WebApp.initDataUnsafe.user || { id: 0, username: 'Гость' };
+                    user = window.Telegram.WebApp.initDataUnsafe.user;
                     console.log('Пользователь:', user);
                     if (user && user.id) {
-__((https://jump-cyborg.onrender.com/get_leaderboard_with_rank?user_id=${user.id}&score=0`, { timeout: 5000 });
+                        console.log('Пользователь авторизован, показываем приветственный экран');
+                        welcomeScreen.style.display = 'flex';
+                        startGameButton.addEventListener('click', () => {
+                            console.log('Кнопка "Начать игру" нажата');
+                            welcomeScreen.style.display = 'none';
+                            gameContainer.style.display = 'block';
+                            startGame();
+                        });
+                        showLeaderboardButton.addEventListener('click', () => {
+                            console.log('Кнопка "Доска лидеров" нажата');
+                            if (!user || !user.id) {
+                                console.error('Пользователь не авторизован для лидерборда');
+                                alert(`Пожалуйста, откройте игру через Telegram-бот ${settings.botUsername}`);
+                                return;
+                            }
+                            console.log('Открываем модальное окно лидерборда');
+                            leaderboardModal.style.display = 'flex';
+                            fetchLeaderboard(user.id, 0, 'modal');
+                            startLeaderboardPolling('modal', user.id, 0);
+                        });
+                    } else {
+                        console.error('Пользователь не авторизован через Telegram WebApp');
+                        const errorMessage = document.createElement('div');
+                        errorMessage.id = 'error-message';
+                        errorMessage.textContent = `Откройте игру через Telegram-бот ${settings.botUsername}`;
+                        document.body.appendChild(errorMessage);
+                        welcomeScreen.style.display = 'none';
+                    }
+                } else {
+                    console.error('Telegram WebApp не доступен');
+                    const errorMessage = document.createElement('div');
+                    errorMessage.id = 'error-message';
+                    errorMessage.textContent = `Откройте игру через Telegram-бот ${settings.botUsername}`;
+                    document.body.appendChild(errorMessage);
+                    welcomeScreen.style.display = 'none';
+                }
+
+                closeLeaderboardButton.addEventListener('click', () => {
+                    console.log('Кнопка "Закрыть лидерборд" нажата');
+                    leaderboardModal.style.display = 'none';
+                    stopLeaderboardPolling();
+                });
+            }
+
+            async function fetchWithRetry(url, retries = 5, delay = 1000) {
+                for (let i = 0; i < retries; i++) {
+                    try {
+                        console.log(`Запрос к ${url}, попытка ${i + 1}`);
+                        const response = await fetch(url);
                         if (response.status === 404) {
                             throw new Error('Сервер недоступен (404 Not Found). Проверьте деплой на Render.');
                         }
@@ -660,17 +697,12 @@ __((https://jump-cyborg.onrender.com/get_leaderboard_with_rank?user_id=${user.id
                             data.leaderboard.slice(0, 10).forEach((entry, index) => {
                                 console.log(`Добавление записи (${target}): ${entry.username}, ${entry.score}`);
                                 const li = document.createElement('li');
-                                const isCurrentUser = userId && entry.user_id === userId;
                                 li.innerHTML = `<span class="rank">${index + 1}.</span> ${entry.username}: ${entry.score}`;
-                                if (isCurrentUser) {
-                                    li.classList.add('current-user');
-                                }
                                 listElement.appendChild(li);
                             });
                             if (target === 'game-over' || target === 'modal') {
                                 const highScore = Math.max(...data.leaderboard.map(entry => entry.score), 0);
                                 highScoreElement.textContent = highScore;
-                                localStorage.setItem('highScore', highScore);
                                 console.log(`Обновлён рекорд: ${highScore}`);
                             }
                         }
@@ -702,15 +734,14 @@ __((https://jump-cyborg.onrender.com/get_leaderboard_with_rank?user_id=${user.id
                 try {
                     const payload = {
                         user_id: user.id,
-                        username: user.username || user.first_name || 'Гость',
+                        username: user.username || user.first_name || 'Unknown',
                         score: score
                     };
                     console.log('Отправка счёта:', JSON.stringify(payload, null, 2));
                     const response = await fetch(settings.apiUrl, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payload),
-                        timeout: 5000
+                        body: JSON.stringify(payload)
                     });
                     if (response.status === 404) {
                         throw new Error('Сервер недоступен (404 Not Found). Проверьте деплой на Render.');
@@ -724,6 +755,26 @@ __((https://jump-cyborg.onrender.com/get_leaderboard_with_rank?user_id=${user.id
                     }
                 } catch (error) {
                     console.error('Ошибка при отправке счёта:', error.message);
+                }
+            }
+
+            function startLeaderboardPolling(target, userId, score) {
+                if (leaderboardInterval) {
+                    clearInterval(leaderboardInterval);
+                    console.log('Предыдущий polling лидерборда остановлен');
+                }
+                leaderboardInterval = setInterval(() => {
+                    console.log(`Polling: обновление лидерборда (${target})`);
+                    fetchLeaderboard(userId, score, target);
+                }, 10000);
+                console.log(`Polling лидерборда запущен (${target})`);
+            }
+
+            function stopLeaderboardPolling() {
+                if (leaderboardInterval) {
+                    clearInterval(leaderboardInterval);
+                    leaderboardInterval = null;
+                    console.log('Polling лидерборда остановлен');
                 }
             }
 
@@ -753,6 +804,8 @@ __((https://jump-cyborg.onrender.com/get_leaderboard_with_rank?user_id=${user.id
                 leaderboardList.innerHTML = '';
                 playerRankElement.textContent = '';
                 leaderboardModal.style.display = 'none';
+
+                stopLeaderboardPolling();
 
                 document.querySelectorAll('.platform, .disposable-platform, .rocket').forEach(p => p.remove());
 
@@ -1006,6 +1059,7 @@ __((https://jump-cyborg.onrender.com/get_leaderboard_with_rank?user_id=${user.id
                 if (user && user.id) {
                     sendScoreToServer(score);
                     fetchLeaderboard(user.id, score, 'game-over');
+                    startLeaderboardPolling('game-over', user.id, score);
                 }
             }
 
@@ -1083,7 +1137,8 @@ __((https://jump-cyborg.onrender.com/get_leaderboard_with_rank?user_id=${user.id
                 console.log('Запуск игры');
                 try {
                     if (user && user.id) {
-                        fetchLeaderboard(user.id, 0, 'modal'); // Загружаем рекорд при старте
+                        sendScoreToServer(0); // Сохраняем пользователя с нулевым счётом
+                        fetchLeaderboard(user.id, 0, 'modal'); // Загружаем рекорд
                     }
                     if (window.DeviceOrientationEvent) {
                         console.log('DeviceOrientationEvent поддерживается');
@@ -1198,6 +1253,7 @@ __((https://jump-cyborg.onrender.com/get_leaderboard_with_rank?user_id=${user.id
                 console.log('Кнопка "Играть снова" нажата');
                 welcomeScreen.style.display = 'flex';
                 gameContainer.style.display = 'none';
+                stopLeaderboardPolling();
                 gameOverScreen.style.display = 'none';
                 isGyroEnabled = false;
                 window.removeEventListener('deviceorientation', handleDeviceOrientation);
