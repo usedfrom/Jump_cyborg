@@ -179,22 +179,6 @@
             margin-top: 20px;
         }
 
-        #start-button {
-            position: fixed;
-            top: 40%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            padding: 15px 30px;
-            font-size: 20px;
-            background-color: #FF5722;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            z-index: 1000;
-            animation: fadeIn 0.5s ease-in;
-        }
-
         #leaderboard-button {
             position: fixed;
             top: 50%;
@@ -209,14 +193,23 @@
             cursor: pointer;
             z-index: 1000;
             animation: fadeIn 0.5s ease-in;
+            display: none;
         }
 
-        #telegram-login {
+        #error-message {
             position: fixed;
-            top: 65%;
+            top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
+            background: rgba(33, 33, 33, 0.9);
+            color: #FF5722;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            font-size: 20px;
             z-index: 1000;
+            max-width: 300px;
+            animation: fadeIn 0.5s ease-in;
         }
 
         #leaderboard {
@@ -470,14 +463,53 @@
             let user = null;
             let leaderboardInterval = null;
 
-            if (window.Telegram && window.Telegram.WebApp) {
-                window.Telegram.WebApp.ready();
-                console.log('Telegram WebApp инициализирован');
-                console.log('initData:', window.Telegram.WebApp.initData);
-                user = window.Telegram.WebApp.initDataUnsafe.user;
-                console.log('Пользователь:', user);
-            } else {
-                console.log('Telegram WebApp не доступен');
+            function initControls() {
+                const leaderboardButton = document.createElement('button');
+                leaderboardButton.id = 'leaderboard-button';
+                leaderboardButton.textContent = 'Доска лидеров';
+                document.body.appendChild(leaderboardButton);
+
+                if (window.Telegram && window.Telegram.WebApp) {
+                    window.Telegram.WebApp.ready();
+                    console.log('Telegram WebApp инициализирован');
+                    console.log('initData:', window.Telegram.WebApp.initData);
+                    user = window.Telegram.WebApp.initDataUnsafe.user;
+                    console.log('Пользователь:', user);
+                    if (user && user.id) {
+                        leaderboardButton.style.display = 'block';
+                        startGame();
+                    } else {
+                        console.error('Пользователь не авторизован через Telegram WebApp');
+                        const errorMessage = document.createElement('div');
+                        errorMessage.id = 'error-message';
+                        errorMessage.textContent = 'Откройте игру через Telegram-бот @JumpBot';
+                        document.body.appendChild(errorMessage);
+                        leaderboardButton.style.display = 'none';
+                    }
+                } else {
+                    console.error('Telegram WebApp не доступен');
+                    const errorMessage = document.createElement('div');
+                    errorMessage.id = 'error-message';
+                    errorMessage.textContent = 'Откройте игру через Telegram-бот @JumpBot';
+                    document.body.appendChild(errorMessage);
+                    leaderboardButton.style.display = 'none';
+                }
+
+                leaderboardButton.addEventListener('click', () => {
+                    console.log('Кнопка "Доска лидеров" нажата');
+                    if (!user || !user.id) {
+                        alert('Пожалуйста, откройте игру через Telegram-бот @JumpBot');
+                        return;
+                    }
+                    leaderboardModal.style.display = 'flex';
+                    fetchLeaderboard(user.id, 0, 'modal');
+                    startLeaderboardPolling('modal', user.id, 0);
+                });
+
+                closeLeaderboardButton.addEventListener('click', () => {
+                    leaderboardModal.style.display = 'none';
+                    stopLeaderboardPolling();
+                });
             }
 
             async function fetchWithRetry(url, retries = 3, delay = 1000) {
@@ -941,102 +973,6 @@
 
             function lerp(start, end, amt) {
                 return (1 - amt) * start + amt * end;
-            }
-
-            function initControls() {
-                const startButton = document.createElement('button');
-                startButton.id = 'start-button';
-                startButton.textContent = 'Войти через Telegram';
-                document.body.appendChild(startButton);
-
-                const leaderboardButton = document.createElement('button');
-                leaderboardButton.id = 'leaderboard-button';
-                leaderboardButton.textContent = 'Доска лидеров';
-                leaderboardButton.style.display = 'none'; // Скрыта до авторизации
-                document.body.appendChild(leaderboardButton);
-
-                const telegramLoginDiv = document.createElement('div');
-                telegramLoginDiv.id = 'telegram-login';
-                document.body.appendChild(telegramLoginDiv);
-
-                window.TelegramLoginWidget = {
-                    dataOnauth: (userData) => {
-                        console.log('Telegram Login авторизация:', JSON.stringify(userData, null, 2));
-                        fetch('https://jump-cyborg.onrender.com/telegram_login', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(userData)
-                        })
-                        .then(response => {
-                            if (response.status === 404) {
-                                throw new Error('Сервер недоступен (404 Not Found). Проверьте деплой на Render.');
-                            }
-                            return response.json();
-                        })
-                        .then(data => {
-                            console.log('Ответ /telegram_login:', JSON.stringify(data, null, 2));
-                            if (data.status === 'OK' && data.user) {
-                                user = data.user;
-                                startButton.remove();
-                                telegramLoginDiv.remove();
-                                leaderboardButton.style.display = 'block';
-                                startGame();
-                            } else {
-                                console.error('Ошибка авторизации:', data.message);
-                                alert('Не удалось авторизоваться. Попробуйте снова.');
-                            }
-                        })
-                        .catch(error => {
-                            console.error('Ошибка запроса /telegram_login:', error.message);
-                            alert(`Ошибка авторизации: ${error.message}`);
-                        });
-                    }
-                };
-
-                const script = document.createElement('script');
-                script.src = 'https://telegram.org/js/telegram-widget.js';
-                script.setAttribute('data-telegram-login', '@JumpBot');
-                script.setAttribute('data-size', 'large');
-                script.setAttribute('data-onauth', 'TelegramLoginWidget.dataOnauth(user)');
-                script.async = true;
-                telegramLoginDiv.appendChild(script);
-
-                startButton.addEventListener('click', () => {
-                    console.log('Кнопка "Войти через Telegram" нажата');
-                    if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initData) {
-                        window.Telegram.WebApp.ready();
-                        user = window.Telegram.WebApp.initDataUnsafe.user;
-                        console.log('WebApp пользователь:', JSON.stringify(user, null, 2));
-                        if (user && user.id) {
-                            startButton.remove();
-                            telegramLoginDiv.remove();
-                            leaderboardButton.style.display = 'block';
-                            startGame();
-                        } else {
-                            console.error('WebApp: пользователь не определён');
-                            alert('Не удалось авторизоваться. Откройте через Telegram или используйте Telegram Login.');
-                        }
-                    } else {
-                        console.log('WebApp недоступен, требуется Telegram Login');
-                        alert('Используйте кнопку Telegram Login ниже.');
-                    }
-                });
-
-                leaderboardButton.addEventListener('click', () => {
-                    console.log('Кнопка "Доска лидеров" нажата');
-                    if (!user || !user.id) {
-                        alert('Пожалуйста, авторизуйтесь через Telegram.');
-                        return;
-                    }
-                    leaderboardModal.style.display = 'flex';
-                    fetchLeaderboard(user.id, 0, 'modal');
-                    startLeaderboardPolling('modal', user.id, 0);
-                });
-
-                closeLeaderboardButton.addEventListener('click', () => {
-                    leaderboardModal.style.display = 'none';
-                    stopLeaderboardPolling();
-                });
             }
 
             function startGame() {
