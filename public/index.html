@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Игра с платформами</title>
+    <title>Jump Cyborg</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
     <style>
         * {
             margin: 0;
@@ -12,11 +13,12 @@
         }
 
         body {
-            font-family: Arial, sans-serif;
+            font-family: 'Roboto', Arial, sans-serif;
             overflow: hidden;
             touch-action: none;
-            background: #000000;
+            background: #121212;
             height: 100vh;
+            color: #E0E0E0;
         }
 
         #starfield {
@@ -33,6 +35,47 @@
             width: 100%;
             height: 100vh;
             overflow: hidden;
+            display: none;
+        }
+
+        #welcome-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(18, 18, 18, 0.9);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 200;
+            animation: fadeIn 0.5s ease-in;
+        }
+
+        #welcome-screen h1 {
+            font-size: 36px;
+            margin-bottom: 20px;
+            text-shadow: 0 0 10px #FF5722;
+            animation: pulse 2s infinite;
+        }
+
+        #welcome-screen .button {
+            padding: 15px 30px;
+            font-size: 20px;
+            margin: 10px;
+            background: linear-gradient(45deg, #FF5722, #FF9800);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        #welcome-screen .button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
         }
 
         #character {
@@ -119,18 +162,9 @@
         }
 
         @keyframes crumble {
-            0% {
-                transform: scale(1) translateY(0);
-                opacity: 1;
-            }
-            50% {
-                transform: scale(0.8) translateY(50px);
-                opacity: 0.7;
-            }
-            100% {
-                transform: scale(0.5) translateY(200px);
-                opacity: 0;
-            }
+            0% { transform: scale(1) translateY(0); opacity: 1; }
+            50% { transform: scale(0.8) translateY(50px); opacity: 0.7; }
+            100% { transform: scale(0.5) translateY(200px); opacity: 0; }
         }
 
         @keyframes fadeIn {
@@ -148,52 +182,26 @@
             z-index: 100;
         }
 
-        #game-over {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.8);
-            color: #E0E0E0;
-            display: none;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            z-index: 200;
-        }
-
-        #game-over h2 {
-            font-size: 36px;
-            margin-bottom: 20px;
-        }
-
-        #restart {
-            padding: 10px 20px;
-            font-size: 20px;
-            background-color: #FF5722;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            margin-top: 20px;
-        }
-
         #leaderboard-button {
             position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            padding: 15px 30px;
-            font-size: 20px;
-            background-color: #FF5722;
+            top: 20px;
+            right: 20px;
+            padding: 10px 20px;
+            font-size: 18px;
+            background: linear-gradient(45deg, #4CAF50, #66BB6A);
             color: white;
             border: none;
-            border-radius: 5px;
+            border-radius: 8px;
             cursor: pointer;
             z-index: 1000;
-            animation: fadeIn 0.5s ease-in;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            transition: transform 0.2s, box-shadow 0.2s;
             display: none;
+        }
+
+        #leaderboard-button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
         }
 
         #error-message {
@@ -210,6 +218,46 @@
             z-index: 1000;
             max-width: 300px;
             animation: fadeIn 0.5s ease-in;
+        }
+
+        #game-over {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(18, 18, 18, 0.9);
+            color: #E0E0E0;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 200;
+            animation: fadeIn 0.5s ease-in;
+        }
+
+        #game-over h2 {
+            font-size: 36px;
+            margin-bottom: 20px;
+            text-shadow: 0 0 10px #FF5722;
+        }
+
+        #restart {
+            padding: 15px 30px;
+            font-size: 20px;
+            background: linear-gradient(45deg, #FF5722, #FF9800);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            margin-top: 20px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        #restart:hover {
+            transform: scale(1.05);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
         }
 
         #leaderboard {
@@ -258,18 +306,20 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background-color: rgba(0, 0, 0, 0.8);
+            background: rgba(18, 18, 18, 0.9);
             color: #E0E0E0;
             display: none;
             flex-direction: column;
             justify-content: center;
             align-items: center;
             z-index: 200;
+            animation: fadeIn 0.5s ease-in;
         }
 
         #leaderboard-modal h2 {
             font-size: 36px;
             margin-bottom: 20px;
+            text-shadow: 0 0 10px #FF5722;
         }
 
         #leaderboard-modal .leaderboard-content {
@@ -312,25 +362,66 @@
         }
 
         #close-leaderboard {
-            padding: 10px 20px;
+            padding: 15px 30px;
             font-size: 20px;
-            background-color: #FF5722;
+            background: linear-gradient(45deg, #FF5722, #FF9800);
             color: white;
             border: none;
-            border-radius: 5px;
+            border-radius: 8px;
             cursor: pointer;
             margin-top: 20px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        #close-leaderboard:hover {
+            transform: scale(1.05);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+        }
+
+        @media (max-width: 600px) {
+            #welcome-screen h1 {
+                font-size: 28px;
+            }
+            #welcome-screen .button {
+                padding: 12px 24px;
+                font-size: 18px;
+            }
+            #leaderboard-button {
+                padding: 8px 16px;
+                font-size: 16px;
+            }
+            #game-over h2 {
+                font-size: 28px;
+            }
+            #restart {
+                padding: 12px 24px;
+                font-size: 18px;
+            }
+            #leaderboard-modal h2 {
+                font-size: 28px;
+            }
+            #close-leaderboard {
+                padding: 12px 24px;
+                font-size: 18px;
+            }
         }
     </style>
 </head>
 <body>
     <canvas id="starfield"></canvas>
+    <div id="welcome-screen">
+        <h1>Jump Cyborg</h1>
+        <button id="start-game" class="button">Начать игру</button>
+        <button id="show-leaderboard" class="button">Доска лидеров</button>
+    </div>
     <div id="game-container">
         <div id="character" class="facing-right"></div>
         <div id="score">0</div>
+        <button id="leaderboard-button">Доска лидеров</button>
         <div id="game-over">
             <h2>Игра окончена!</h2>
-            <p>Ваш счет: <span id="final-score">0</span></p>
+            <p>Ваш счёт: <span id="final-score">0</span></p>
             <div id="leaderboard">
                 <h3>Таблица лидеров</h3>
                 <ul id="leaderboard-list"></ul>
@@ -403,10 +494,14 @@
 
             const character = document.getElementById('character');
             const gameContainer = document.getElementById('game-container');
+            const welcomeScreen = document.getElementById('welcome-screen');
+            const startGameButton = document.getElementById('start-game');
+            const showLeaderboardButton = document.getElementById('show-leaderboard');
             const scoreElement = document.getElementById('score');
             const gameOverScreen = document.getElementById('game-over');
             const finalScoreElement = document.getElementById('final-score');
             const restartButton = document.getElementById('restart');
+            const leaderboardButton = document.getElementById('leaderboard-button');
             const leaderboardList = document.getElementById('leaderboard-list');
             const playerRankElement = document.getElementById('player-rank');
             const leaderboardModal = document.getElementById('leaderboard-modal');
@@ -441,7 +536,7 @@
                 initialWidthChance: 0.2,
                 apiUrl: 'https://jump-cyborg.onrender.com/save_score',
                 leaderboardUrl: 'https://jump-cyborg.onrender.com/get_leaderboard_with_rank',
-                botUsername: '@JumpBot'
+                botUsername: '@JumpingNewCyborgBot'
             };
 
             let score = 0;
@@ -464,11 +559,6 @@
             let leaderboardInterval = null;
 
             function initControls() {
-                const leaderboardButton = document.createElement('button');
-                leaderboardButton.id = 'leaderboard-button';
-                leaderboardButton.textContent = 'Доска лидеров';
-                document.body.appendChild(leaderboardButton);
-
                 if (window.Telegram && window.Telegram.WebApp) {
                     window.Telegram.WebApp.ready();
                     console.log('Telegram WebApp инициализирован');
@@ -476,29 +566,39 @@
                     user = window.Telegram.WebApp.initDataUnsafe.user;
                     console.log('Пользователь:', user);
                     if (user && user.id) {
-                        leaderboardButton.style.display = 'block';
-                        startGame();
+                        welcomeScreen.style.display = 'flex';
+                        startGameButton.addEventListener('click', () => {
+                            welcomeScreen.style.display = 'none';
+                            gameContainer.style.display = 'block';
+                            leaderboardButton.style.display = 'block';
+                            startGame();
+                        });
+                        showLeaderboardButton.addEventListener('click', () => {
+                            leaderboardModal.style.display = 'flex';
+                            fetchLeaderboard(user.id, 0, 'modal');
+                            startLeaderboardPolling('modal', user.id, 0);
+                        });
                     } else {
                         console.error('Пользователь не авторизован через Telegram WebApp');
                         const errorMessage = document.createElement('div');
                         errorMessage.id = 'error-message';
-                        errorMessage.textContent = 'Откройте игру через Telegram-бот @JumpBot';
+                        errorMessage.textContent = `Откройте игру через Telegram-бот ${settings.botUsername}`;
                         document.body.appendChild(errorMessage);
-                        leaderboardButton.style.display = 'none';
+                        welcomeScreen.style.display = 'none';
                     }
                 } else {
                     console.error('Telegram WebApp не доступен');
                     const errorMessage = document.createElement('div');
                     errorMessage.id = 'error-message';
-                    errorMessage.textContent = 'Откройте игру через Telegram-бот @JumpBot';
+                    errorMessage.textContent = `Откройте игру через Telegram-бот ${settings.botUsername}`;
                     document.body.appendChild(errorMessage);
-                    leaderboardButton.style.display = 'none';
+                    welcomeScreen.style.display = 'none';
                 }
 
                 leaderboardButton.addEventListener('click', () => {
                     console.log('Кнопка "Доска лидеров" нажата');
                     if (!user || !user.id) {
-                        alert('Пожалуйста, откройте игру через Telegram-бот @JumpBot');
+                        alert(`Пожалуйста, откройте игру через Telegram-бот ${settings.botUsername}`);
                         return;
                     }
                     leaderboardModal.style.display = 'flex';
@@ -687,7 +787,7 @@
                     isNew: false,
                     isDisposable: false,
                     hasRocket: false,
-                    isDestroyed: false
+                    is from: false
                 });
             }
 
@@ -903,6 +1003,7 @@
                 isGameOver = true;
                 finalScoreElement.textContent = score;
                 gameOverScreen.style.display = 'flex';
+                leaderboardButton.style.display = 'none';
                 sendScoreToServer(score);
                 if (user && user.id) {
                     startLeaderboardPolling('game-over', user.id, score);
@@ -1049,7 +1150,11 @@
             }
 
             restartButton.addEventListener('click', () => {
-                initGame();
+                welcomeScreen.style.display = 'flex';
+                gameContainer.style.display = 'none';
+                leaderboardButton.style.display = 'none';
+                stopLeaderboardPolling();
+                gameOverScreen.style.display = 'none';
             });
 
             setupKeyboardControls();
