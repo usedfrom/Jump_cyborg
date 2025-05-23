@@ -41,7 +41,7 @@ if not GITHUB_TOKEN:
     raise ValueError("GITHUB_TOKEN не указан")
 
 # Конфигурация GitHub
-GITHUB_REPO = 'your-username/your-repo'  # Замените на ваш репозиторий
+GITHUB_REPO = 'myusername/backend'  # Замените на ваш репозиторий
 GITHUB_FILE_PATH = 'data/scores.json'
 GITHUB_API_URL = f'https://api.github.com/repos/{GITHUB_REPO}/contents/{GITHUB_FILE_PATH}'
 GITHUB_HEADERS = {
