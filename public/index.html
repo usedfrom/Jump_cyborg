@@ -485,7 +485,12 @@
                     try {
                         console.log(`Запрос к ${url}, попытка ${i + 1}`);
                         const response = await fetch(url);
-                        if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                        if (response.status === 404) {
+                            throw new Error('Сервер недоступен (404 Not Found). Проверьте деплой на Render.');
+                        }
+                        if (!response.ok) {
+                            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                        }
                         return await response.json();
                     } catch (error) {
                         console.error(`Попытка ${i + 1} не удалась:`, error.message);
@@ -532,7 +537,7 @@
                     }
                 } catch (error) {
                     console.error(`Ошибка при загрузке лидерборда (${target}):`, error.message);
-                    listElement.innerHTML = '<li>Не удалось загрузить таблицу лидеров</li>';
+                    listElement.innerHTML = `<li>Ошибка загрузки: ${error.message}</li>`;
                     rankElement.textContent = '';
                 }
             }
@@ -554,6 +559,9 @@
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(payload)
                     });
+                    if (response.status === 404) {
+                        throw new Error('Сервер недоступен (404 Not Found). Проверьте деплой на Render.');
+                    }
                     const result = await response.json();
                     console.log('Результат отправки счёта:', JSON.stringify(result, null, 2));
                     if (result.status === 'OK') {
@@ -959,7 +967,12 @@
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify(userData)
                         })
-                        .then(response => response.json())
+                        .then(response => {
+                            if (response.status === 404) {
+                                throw new Error('Сервер недоступен (404 Not Found). Проверьте деплой на Render.');
+                            }
+                            return response.json();
+                        })
                         .then(data => {
                             console.log('Ответ /telegram_login:', JSON.stringify(data, null, 2));
                             if (data.status === 'OK' && data.user) {
@@ -975,7 +988,7 @@
                         })
                         .catch(error => {
                             console.error('Ошибка запроса /telegram_login:', error.message);
-                            alert('Ошибка сервера. Попробуйте снова.');
+                            alert(`Ошибка авторизации: ${error.message}`);
                         });
                     }
                 };
