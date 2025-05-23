@@ -12,6 +12,7 @@ import asyncio
 import logging
 import base64
 from dotenv import load_dotenv
+import telegram
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "https://jump-cyborg.vercel.app"}})
@@ -19,6 +20,11 @@ CORS(app, resources={r"/*": {"origins": "https://jump-cyborg.vercel.app"}})
 # Настройка логирования
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+# Проверка версии python-telegram-bot
+if telegram.__version__.split('.')[0] < '20':
+    logger.error(f"Требуется python-telegram-bot >= 20.0, установлена версия {telegram.__version__}")
+    raise ImportError("Обновите python-telegram-bot до версии >= 20.0")
 
 # Загрузка переменных окружения
 load_dotenv()
@@ -47,8 +53,13 @@ GITHUB_HEADERS = {
 }
 
 # Инициализация бота
-bot = Bot(token=BOT_TOKEN)
-application = Application.builder().token(BOT_TOKEN).build()
+try:
+    bot = Bot(token=BOT_TOKEN)
+    application = Application.builder().token(BOT_TOKEN).build()
+    logger.info("Telegram Bot успешно инициализирован")
+except Exception as e:
+    logger.error(f"Ошибка инициализации Telegram Bot: {e}")
+    raise
 
 # Проверка Telegram Login
 def check_telegram_auth(data):
@@ -284,7 +295,14 @@ def telegram_login():
 def main():
     application.add_handler(CommandHandler('start', start))
     application.add_handler(CommandHandler('top', top))
-    application.run_polling()
+    try:
+        application.run_polling()
+        logger.info("Polling Telegram Bot запущен")
+    except Exception as e:
+        logger.error(f"Ошибка при запуске polling: {e}")
+        raise
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=int(os.getenv('PORT', 10000)))
+    port = int(os.getenv('PORT', 10000))
+    logger.info(f"Запуск Flask сервера на порту {port}")
+    app.run(host='0.0.0.0', port=port)
