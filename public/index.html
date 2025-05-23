@@ -69,7 +69,7 @@
             color: white;
             border: none;
             border-radius: 8px;
-            cursor: pointer;
+            cursor Ors: pointer;
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
             transition: transform 0.2s, box-shadow 0.2s;
             text-align: center;
@@ -206,7 +206,7 @@
             box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
         }
 
-        #error-message {
+        #error-message, #gyro-message {
             position: fixed;
             top: 50%;
             left: 50%;
@@ -408,6 +408,10 @@
                 padding: 12px 24px;
                 font-size: 18px;
             }
+            #gyro-message {
+                font-size: 18px;
+                max-width: 250px;
+            }
         }
     </style>
 </head>
@@ -560,6 +564,20 @@
             let lastDestroyedPlatform = null;
             let user = null;
             let leaderboardInterval = null;
+            let isGyroEnabled = false;
+
+            function showGyroMessage(message) {
+                console.log('Отображение сообщения о гироскопе:', message);
+                const existingMessage = document.getElementById('gyro-message');
+                if (existingMessage) existingMessage.remove();
+                const gyroMessage = document.createElement('div');
+                gyroMessage.id = 'gyro-message';
+                gyroMessage.textContent = message;
+                document.body.appendChild(gyroMessage);
+                setTimeout(() => {
+                    gyroMessage.remove();
+                }, 3000);
+            }
 
             function initControls() {
                 if (window.Telegram && window.Telegram.WebApp) {
@@ -1071,7 +1089,11 @@
             function handleDeviceOrientation(event) {
                 if (!isGameStarted) return;
                 const gamma = event.gamma;
-                if (gamma === null) return;
+                console.log('Гироскоп: gamma=', gamma);
+                if (gamma === null || isNaN(gamma)) {
+                    console.warn('Гироскоп вернул некорректные данные');
+                    return;
+                }
 
                 let targetVelocity = gamma * settings.sensitivity;
                 targetVelocity = Math.max(-settings.maxSpeed, Math.min(settings.maxSpeed, targetVelocity));
@@ -1094,12 +1116,59 @@
             function startGame() {
                 console.log('Запуск игры');
                 try {
+                    if (window.DeviceOrientationEvent) {
+                        console.log('DeviceOrientationEvent поддерживается');
+                        if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+                            console.log('Запрашиваем разрешение на гироскоп (iOS)');
+                            DeviceOrientationEvent.requestPermission()
+                                .then(response => {
+                                    if (response === 'granted') {
+                                        console.log('Разрешение на гироскоп получено');
+                                        isGyroEnabled = true;
+                                        window.addEventListener('deviceorientation', handleDeviceOrientation);
+                                        setupTouchControls(); // Дополнительно тач
+                                        setupKeyboardControls();
+                                        initGame();
+                                    } else {
+                                        console.warn('Разрешение на гироскоп отклонено');
+                                        showGyroMessage('Гироскоп не разрешён. Используйте касания.');
+                                        isGyroEnabled = false;
+                                        setupTouchControls();
+                                        setupKeyboardControls();
+                                        initGame();
+                                    }
+                                })
+                                .catch(error => {
+                                    console.error('Ошибка запроса гироскопа:', error.message);
+                                    showGyroMessage('Ошибка гироскопа. Используйте касания.');
+                                    isGyroEnabled = false;
+                                    setupTouchControls();
+                                    setupKeyboardControls();
+                                    initGame();
+                                });
+                        } else {
+                            console.log('Гироскоп доступен без разрешения (Android/десктоп)');
+                            isGyroEnabled = true;
+                            window.addEventListener('deviceorientation', handleDeviceOrientation);
+                            setupTouchControls();
+                            setupKeyboardControls();
+                            initGame();
+                        }
+                    } else {
+                        console.warn('Гироскоп не поддерживается устройством');
+                        showGyroMessage('Гироскоп не поддерживается. Используйте касания.');
+                        isGyroEnabled = false;
+                        setupTouchControls();
+                        setupKeyboardControls();
+                        initGame();
+                    }
+                } catch (error) {
+                    console.error('Ошибка при запуске игры:', error.message);
+                    showGyroMessage('Не удалось запустить игру. Проверьте консоль.');
+                    isGyroEnabled = false;
                     setupTouchControls();
                     setupKeyboardControls();
                     initGame();
-                } catch (error) {
-                    console.error('Ошибка при запуске игры:', error.message);
-                    alert('Не удалось запустить игру. Проверьте консоль браузера.');
                 }
             }
 
@@ -1110,6 +1179,7 @@
                     touchStartX = e.touches[0].clientX;
                 });
                 document.addEventListener('touchmove', e => {
+                    if (isGyroEnabled) return; // Тач только если гироскоп выключен
                     const touchX = e.touches[0].clientX;
                     characterVelocityX = (touchX - touchStartX) * 0.1;
                     touchStartX = touchX;
@@ -1123,6 +1193,7 @@
                     }
                 });
                 document.addEventListener('touchend', () => {
+                    if (isGyroEnabled) return;
                     characterVelocityX = 0;
                     character.classList.remove('facing-left', 'facing-right');
                     character.classList.add('facing-right');
@@ -1132,6 +1203,7 @@
             function setupKeyboardControls() {
                 console.log('Настройка клавиатурного управления');
                 window.addEventListener('keydown', e => {
+                    if (isGyroEnabled) return; // Клавиатура только если гироскоп выключен
                     if (e.key === 'ArrowLeft') {
                         characterVelocityX = -6;
                         character.classList.remove('facing-right');
@@ -1144,6 +1216,7 @@
                     }
                 });
                 window.addEventListener('keyup', e => {
+                    if (isGyroEnabled) return;
                     if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
                         characterVelocityX = 0;
                         character.classList.remove('facing-left', 'facing-right');
@@ -1159,6 +1232,8 @@
                 leaderboardButton.style.display = 'none';
                 stopLeaderboardPolling();
                 gameOverScreen.style.display = 'none';
+                isGyroEnabled = false;
+                window.removeEventListener('deviceorientation', handleDeviceOrientation);
             });
 
             initControls();
