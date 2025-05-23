@@ -61,7 +61,8 @@
         }
 
         #welcome-screen .button {
-            padding: 15px 30px;
+            width: 200px;
+            padding: 15px;
             font-size: 20px;
             margin: 10px;
             background: linear-gradient(45deg, #FF5722, #FF9800);
@@ -71,6 +72,7 @@
             cursor: pointer;
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
             transition: transform 0.2s, box-shadow 0.2s;
+            text-align: center;
         }
 
         #welcome-screen .button:hover {
@@ -384,7 +386,8 @@
                 font-size: 28px;
             }
             #welcome-screen .button {
-                padding: 12px 24px;
+                width: 180px;
+                padding: 12px;
                 font-size: 18px;
             }
             #leaderboard-button {
@@ -566,14 +569,22 @@
                     user = window.Telegram.WebApp.initDataUnsafe.user;
                     console.log('Пользователь:', user);
                     if (user && user.id) {
+                        console.log('Пользователь авторизован, показываем приветственный экран');
                         welcomeScreen.style.display = 'flex';
                         startGameButton.addEventListener('click', () => {
+                            console.log('Кнопка "Начать игру" нажата');
                             welcomeScreen.style.display = 'none';
                             gameContainer.style.display = 'block';
                             leaderboardButton.style.display = 'block';
                             startGame();
                         });
                         showLeaderboardButton.addEventListener('click', () => {
+                            console.log('Кнопка "Доска лидеров" нажата');
+                            if (!user || !user.id) {
+                                console.error('Пользователь не авторизован для лидерборда');
+                                alert(`Пожалуйста, откройте игру через Telegram-бот ${settings.botUsername}`);
+                                return;
+                            }
                             leaderboardModal.style.display = 'flex';
                             fetchLeaderboard(user.id, 0, 'modal');
                             startLeaderboardPolling('modal', user.id, 0);
@@ -596,8 +607,9 @@
                 }
 
                 leaderboardButton.addEventListener('click', () => {
-                    console.log('Кнопка "Доска лидеров" нажата');
+                    console.log('Кнопка "Доска лидеров" (в игре) нажата');
                     if (!user || !user.id) {
+                        console.error('Пользователь не авторизован для лидерборда');
                         alert(`Пожалуйста, откройте игру через Telegram-бот ${settings.botUsername}`);
                         return;
                     }
@@ -607,12 +619,13 @@
                 });
 
                 closeLeaderboardButton.addEventListener('click', () => {
+                    console.log('Кнопка "Закрыть лидерборд" нажата');
                     leaderboardModal.style.display = 'none';
                     stopLeaderboardPolling();
                 });
             }
 
-            async function fetchWithRetry(url, retries = 3, delay = 1000) {
+            async function fetchWithRetry(url, retries = 5, delay = 1000) {
                 for (let i = 0; i < retries; i++) {
                     try {
                         console.log(`Запрос к ${url}, попытка ${i + 1}`);
@@ -625,17 +638,17 @@
                         }
                         return await response.json();
                     } catch (error) {
-                        console.error(`Попытка ${i + 1} не удалась:`, error.message);
+                        console.error(`Попытка ${i + 1} не удалась: ${error.message}`);
                         if (i < retries - 1) await new Promise(resolve => setTimeout(resolve, delay));
                     }
                 }
-                throw new Error('Не удалось выполнить запрос');
+                throw new Error('Не удалось выполнить запрос после всех попыток');
             }
 
             async function fetchLeaderboard(userId, currentScore, target = 'game-over') {
                 try {
                     const url = userId ? `${settings.leaderboardUrl}?user_id=${userId}&score=${currentScore}` : settings.leaderboardUrl;
-                    console.log(`Запрос лидерборда (${target}):`, url);
+                    console.log(`Запрос лидерборда (${target}): ${url}`);
                     const data = await fetchWithRetry(url);
                     console.log(`Ответ лидерборда (${target}):`, JSON.stringify(data, null, 2));
                     
@@ -668,7 +681,7 @@
                         throw new Error(data.message || 'Неверный формат ответа');
                     }
                 } catch (error) {
-                    console.error(`Ошибка при загрузке лидерборда (${target}):`, error.message);
+                    console.error(`Ошибка при загрузке лидерборда (${target}): ${error.message}`);
                     listElement.innerHTML = `<li>Ошибка загрузки: ${error.message}</li>`;
                     rankElement.textContent = '';
                 }
@@ -728,6 +741,7 @@
             }
 
             function initGame() {
+                console.log('Инициализация игры');
                 score = 0;
                 isGameOver = false;
                 isGameStarted = true;
@@ -787,7 +801,7 @@
                     isNew: false,
                     isDisposable: false,
                     hasRocket: false,
-                    is from: false
+                    isDestroyed: false
                 });
             }
 
@@ -1000,6 +1014,7 @@
             }
 
             function gameOver() {
+                console.log('Игра окончена');
                 isGameOver = true;
                 finalScoreElement.textContent = score;
                 gameOverScreen.style.display = 'flex';
@@ -1077,32 +1092,19 @@
             }
 
             function startGame() {
-                if (window.DeviceOrientationEvent && typeof DeviceOrientationEvent.requestPermission === 'function') {
-                    DeviceOrientationEvent.requestPermission()
-                        .then(response => {
-                            if (response === 'granted') {
-                                window.addEventListener('deviceorientation', handleDeviceOrientation);
-                                setupTouchControls();
-                                initGame();
-                            } else {
-                                alert('Гироскоп не разрешён. Используйте касания.');
-                                setupTouchControls();
-                                initGame();
-                            }
-                        })
-                        .catch(error => {
-                            console.error('Ошибка гироскопа:', error.message);
-                            setupTouchControls();
-                            initGame();
-                        });
-                } else {
-                    window.addEventListener('deviceorientation', handleDeviceOrientation);
+                console.log('Запуск игры');
+                try {
                     setupTouchControls();
+                    setupKeyboardControls();
                     initGame();
+                } catch (error) {
+                    console.error('Ошибка при запуске игры:', error.message);
+                    alert('Не удалось запустить игру. Проверьте консоль браузера.');
                 }
             }
 
             function setupTouchControls() {
+                console.log('Настройка тач-управления');
                 let touchStartX = 0;
                 document.addEventListener('touchstart', e => {
                     touchStartX = e.touches[0].clientX;
@@ -1128,6 +1130,7 @@
             }
 
             function setupKeyboardControls() {
+                console.log('Настройка клавиатурного управления');
                 window.addEventListener('keydown', e => {
                     if (e.key === 'ArrowLeft') {
                         characterVelocityX = -6;
@@ -1150,6 +1153,7 @@
             }
 
             restartButton.addEventListener('click', () => {
+                console.log('Кнопка "Играть снова" нажата');
                 welcomeScreen.style.display = 'flex';
                 gameContainer.style.display = 'none';
                 leaderboardButton.style.display = 'none';
@@ -1157,7 +1161,6 @@
                 gameOverScreen.style.display = 'none';
             });
 
-            setupKeyboardControls();
             initControls();
         });
     </script>
