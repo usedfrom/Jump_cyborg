@@ -587,6 +587,8 @@
             let user = null;
             let leaderboardInterval = null;
             let isGyroEnabled = false;
+            let highScore = localStorage.getItem('highScore') || 0;
+            highScoreElement.textContent = highScore;
 
             function showGyroMessage(message) {
                 console.log('Отображение сообщения о гироскопе:', message);
@@ -625,9 +627,10 @@
                                 return;
                             }
                             console.log('Открываем модальное окно лидерборда');
+                            welcomeScreen.style.display = 'none';
                             leaderboardModal.style.display = 'flex';
-                            fetchLeaderboard(user.id, 0, 'modal');
-                            startLeaderboardPolling('modal', user.id, 0);
+                            fetchLeaderboard(user.id, score, 'modal');
+                            startLeaderboardPolling('modal', user.id, score);
                         });
                     } else {
                         console.error('Пользователь не авторизован через Telegram WebApp');
@@ -649,6 +652,7 @@
                 closeLeaderboardButton.addEventListener('click', () => {
                     console.log('Кнопка "Закрыть лидерборд" нажата');
                     leaderboardModal.style.display = 'none';
+                    welcomeScreen.style.display = 'flex';
                     stopLeaderboardPolling();
                 });
             }
@@ -701,14 +705,18 @@
                                 listElement.appendChild(li);
                             });
                             if (target === 'game-over' || target === 'modal') {
-                                const highScore = Math.max(...data.leaderboard.map(entry => entry.score), 0);
-                                highScoreElement.textContent = highScore;
+                                const highScoreServer = Math.max(...data.leaderboard.map(entry => entry.score), 0);
+                                if (highScoreServer > highScore) {
+                                    highScore = highScoreServer;
+                                    localStorage.setItem('highScore', highScore);
+                                    highScoreElement.textContent = highScore;
+                                }
                                 console.log(`Обновлён рекорд: ${highScore}`);
                             }
                         }
                         if (data.user_rank) {
-                            rankElement.textContent = `Вы на ${data.user_rank} месте с ${currentScore} очками`;
-                            console.log(`Ранг игрока (${target}): ${data.user_rank}, счёт: ${currentScore}`);
+                            rankElement.textContent = `Вы на ${data.user_rank} месте с ${data.leaderboard.find(entry => entry.user_id === userId)?.score || currentScore} очками`;
+                            console.log(`Ранг игрока (${target}): ${data.user_rank}, счёт: ${data.leaderboard.find(entry => entry.user_id === userId)?.score || currentScore}`);
                         } else {
                             rankElement.textContent = 'У вас пока нет результатов';
                             console.log(`Ранг игрока не определён (${target})`);
@@ -750,6 +758,11 @@
                     console.log('Результат отправки счёта:', JSON.stringify(result, null, 2));
                     if (result.status === 'OK') {
                         console.log('Счёт успешно сохранён');
+                        if (score > highScore) {
+                            highScore = score;
+                            localStorage.setItem('highScore', highScore);
+                            highScoreElement.textContent = highScore;
+                        }
                     } else {
                         console.error('Ошибка сервера:', result.message);
                     }
@@ -1072,195 +1085,4 @@
                 if (characterVelocityX > 0) {
                     character.classList.remove('facing-left');
                     character.classList.add('facing-right');
-                } else if (characterVelocityX < 0) {
-                    character.classList.remove('facing-right');
-                    character.classList.add('facing-left');
-                }
-
-                checkCollisions();
-                updatePositions();
-
-                platforms = platforms.filter(platform => {
-                    if (platform.y + cameraY < window.innerHeight + 100 && !platform.isDestroyed) {
-                        return true;
-                    }
-                    if (platform.hasRocket && platform.rocketElement) {
-                        platform.rocketElement.remove();
-                    }
-                    if (!platform.isDestroyed) {
-                        platform.element.remove();
-                    }
-                    return false;
-                });
-
-                let minPlatformY = platforms.length > 0 ? Math.min(...platforms.map(p => p.y)) : window.innerHeight - 50;
-                while (minPlatformY > cameraY + settings.platformSpawnThreshold || platforms.length < settings.maxPlatforms) {
-                    createPlatform();
-                    minPlatformY = Math.min(...platforms.map(p => p.y));
-                }
-
-                if (gameStartDelay > 0) {
-                    gameStartDelay--;
-                }
-
-                requestAnimationFrame(gameLoop);
-            }
-
-            function handleDeviceOrientation(event) {
-                if (!isGameStarted) return;
-                const gamma = event.gamma;
-                console.log('Гироскоп: gamma=', gamma);
-                if (gamma === null || isNaN(gamma)) {
-                    console.warn('Гироскоп вернул некорректные данные');
-                    return;
-                }
-
-                let targetVelocity = gamma * settings.sensitivity;
-                targetVelocity = Math.max(-settings.maxSpeed, Math.min(settings.maxSpeed, targetVelocity));
-                characterVelocityX = lerp(characterVelocityX, targetVelocity, 0.2);
-                character.style.transform = `rotate(${targetVelocity * 2}deg)`;
-
-                if (characterVelocityX > 0) {
-                    character.classList.remove('facing-left');
-                    character.classList.add('facing-right');
-                } else if (characterVelocityX < 0) {
-                    character.classList.remove('facing-right');
-                    character.classList.add('facing-left');
-                }
-            }
-
-            function lerp(start, end, amt) {
-                return (1 - amt) * start + amt * end;
-            }
-
-            function startGame() {
-                console.log('Запуск игры');
-                try {
-                    if (user && user.id) {
-                        sendScoreToServer(0); // Сохраняем пользователя с нулевым счётом
-                        fetchLeaderboard(user.id, 0, 'modal'); // Загружаем рекорд
-                    }
-                    if (window.DeviceOrientationEvent) {
-                        console.log('DeviceOrientationEvent поддерживается');
-                        if (typeof DeviceOrientationEvent.requestPermission === 'function') {
-                            console.log('Запрашиваем разрешение на гироскоп (iOS)');
-                            DeviceOrientationEvent.requestPermission()
-                                .then(response => {
-                                    if (response === 'granted') {
-                                        console.log('Разрешение на гироскоп получено');
-                                        isGyroEnabled = true;
-                                        window.addEventListener('deviceorientation', handleDeviceOrientation);
-                                        setupTouchControls();
-                                        setupKeyboardControls();
-                                        initGame();
-                                    } else {
-                                        console.warn('Разрешение на гироскоп отклонено');
-                                        showGyroMessage('Гироскоп не разрешён. Используйте касания.');
-                                        isGyroEnabled = false;
-                                        setupTouchControls();
-                                        setupKeyboardControls();
-                                        initGame();
-                                    }
-                                })
-                                .catch(error => {
-                                    console.error('Ошибка запроса гироскопа:', error.message);
-                                    showGyroMessage('Ошибка гироскопа. Используйте касания.');
-                                    isGyroEnabled = false;
-                                    setupTouchControls();
-                                    setupKeyboardControls();
-                                    initGame();
-                                });
-                        } else {
-                            console.log('Гироскоп доступен без разрешения (Android/десктоп)');
-                            isGyroEnabled = true;
-                            window.addEventListener('deviceorientation', handleDeviceOrientation);
-                            setupTouchControls();
-                            setupKeyboardControls();
-                            initGame();
-                        }
-                    } else {
-                        console.warn('Гироскоп не поддерживается устройством');
-                        showGyroMessage('Гироскоп не поддерживается. Используйте касания.');
-                        isGyroEnabled = false;
-                        setupTouchControls();
-                        setupKeyboardControls();
-                        initGame();
-                    }
-                } catch (error) {
-                    console.error('Ошибка при запуске игры:', error.message);
-                    showGyroMessage('Не удалось запустить игру. Проверьте консоль.');
-                    isGyroEnabled = false;
-                    setupTouchControls();
-                    setupKeyboardControls();
-                    initGame();
-                }
-            }
-
-            function setupTouchControls() {
-                console.log('Настройка тач-управления');
-                let touchStartX = 0;
-                document.addEventListener('touchstart', e => {
-                    touchStartX = e.touches[0].clientX;
-                });
-                document.addEventListener('touchmove', e => {
-                    if (isGyroEnabled) return;
-                    const touchX = e.touches[0].clientX;
-                    characterVelocityX = (touchX - touchStartX) * 0.1;
-                    touchStartX = touchX;
-                    e.preventDefault();
-                    if (characterVelocityX > 0) {
-                        character.classList.remove('facing-left');
-                        character.classList.add('facing-right');
-                    } else if (characterVelocityX < 0) {
-                        character.classList.remove('facing-right');
-                        character.classList.add('facing-left');
-                    }
-                });
-                document.addEventListener('touchend', () => {
-                    if (isGyroEnabled) return;
-                    characterVelocityX = 0;
-                    character.classList.remove('facing-left', 'facing-right');
-                    character.classList.add('facing-right');
-                });
-            }
-
-            function setupKeyboardControls() {
-                console.log('Настройка клавиатурного управления');
-                window.addEventListener('keydown', e => {
-                    if (isGyroEnabled) return;
-                    if (e.key === 'ArrowLeft') {
-                        characterVelocityX = -6;
-                        character.classList.remove('facing-right');
-                        character.classList.add('facing-left');
-                    }
-                    if (e.key === 'ArrowRight') {
-                        characterVelocityX = 6;
-                        character.classList.remove('facing-left');
-                        character.classList.add('facing-right');
-                    }
-                });
-                window.addEventListener('keyup', e => {
-                    if (isGyroEnabled) return;
-                    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
-                        characterVelocityX = 0;
-                        character.classList.remove('facing-left', 'facing-right');
-                        character.classList.add('facing-right');
-                    }
-                });
-            }
-
-            restartButton.addEventListener('click', () => {
-                console.log('Кнопка "Играть снова" нажата');
-                welcomeScreen.style.display = 'flex';
-                gameContainer.style.display = 'none';
-                stopLeaderboardPolling();
-                gameOverScreen.style.display = 'none';
-                isGyroEnabled = false;
-                window.removeEventListener('deviceorientation', handleDeviceOrientation);
-            });
-
-            initControls();
-        });
-    </script>
-</body>
-</html>
+                } else if (characterVelocity-groups for the top 10 players.
