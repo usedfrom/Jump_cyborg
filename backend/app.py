@@ -95,7 +95,7 @@ def create_data_folder():
             logger.info("Папка data успешно создана")
             return True
         else:
-            logger.error(f"Ошибка при создании папки data: {response.status_code} {response.text}")
+            logger.error(f"Ошибка при создании пакпи data: {response.status_code} {response.text}")
             return False
     except Exception as e:
         logger.error(f"Ошибка при создании папки data: {e}")
@@ -262,20 +262,32 @@ def save_score():
         existing_entry = next((entry for entry in scores if entry['user_id'] == user_id), None)
         
         if existing_entry:
-            existing_entry['username'] = username
-            existing_entry['score'] = score
-            logger.info(f"Обновлён счёт: user_id={user_id}, username={username}, score={score}")
+            # Обновляем только если новый счёт выше
+            if score > existing_entry['score']:
+                existing_entry['username'] = username
+                existing_entry['score'] = score
+                logger.info(f"Обновлён счёт: user_id={user_id}, username={username}, score={score}")
+                new_sha = save_scores_to_github(scores, sha)
+                if new_sha:
+                    logger.info("Счёт успешно сохранён")
+                    return jsonify({'status': 'OK'})
+                else:
+                    logger.error("Не удалось сохранить счёт в GitHub")
+                    return jsonify({'status': 'error', 'message': 'Failed to save score to GitHub'}), 500
+            else:
+                logger.info(f"Счёт не обновлён, текущий выше: user_id={user_id}, текущий={existing_entry['score']}, новый={score}")
+                return jsonify({'status': 'OK', 'message': 'Score not updated, lower than current'})
         else:
+            # Новый пользователь, добавляем счёт
             scores.append({'user_id': user_id, 'username': username, 'score': score})
             logger.info(f"Новый счёт: user_id={user_id}, username={username}, score={score}")
-        
-        new_sha = save_scores_to_github(scores, sha)
-        if new_sha:
-            logger.info("Счёт успешно сохранён")
-            return jsonify({'status': 'OK'})
-        else:
-            logger.error("Не удалось сохранить счёт в GitHub")
-            return jsonify({'status': 'error', 'message': 'Failed to save score to GitHub'}), 500
+            new_sha = save_scores_to_github(scores, sha)
+            if new_sha:
+                logger.info("Счёт успешно сохранён")
+                return jsonify({'status': 'OK'})
+            else:
+                logger.error("Не удалось сохранить счёт в GitHub")
+                return jsonify({'status': 'error', 'message': 'Failed to save score to GitHub'}), 500
     except Exception as e:
         logger.error(f"Ошибка при /save_score: {e}")
         return jsonify({'status': 'error', 'message': str(e)}), 500
