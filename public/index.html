@@ -630,8 +630,8 @@
                             console.log('Открываем модальное окно лидерборда');
                             welcomeScreen.style.display = 'none';
                             leaderboardModal.style.display = 'flex';
-                            fetchLeaderboard(user.id, score, 'modal');
-                            startLeaderboardPolling('modal', user.id, score);
+                            fetchLeaderboard(user.id, 0, 'modal');
+                            startLeaderboardPolling('modal', user.id, 0);
                         });
                     } else {
                         console.error('Пользователь не авторизован через Telegram WebApp');
@@ -1154,8 +1154,8 @@
                     console.log('Шаг 1: Проверка пользователя');
                     if (user && user.id) {
                         console.log('Пользователь найден, отправка нулевого счёта');
-                        sendScoreToServer(0); // Сохраняем пользователя с нулевым счётом
-                        fetchLeaderboard(user.id, 0, 'modal'); // Загружаем рекорд
+                        sendScoreToServer(0);
+                        fetchLeaderboard(user.id, 0, 'modal');
                     } else {
                         console.warn('Пользователь не авторизован, продолжаем без сохранения');
                     }
