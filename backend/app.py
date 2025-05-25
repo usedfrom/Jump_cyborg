@@ -1,11 +1,11 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
-from telegram.error import TelegramError
+from telegram import Bot, Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Application, CommandHandler, ContextTypes
 import os
 import requests
 import json
+import time
 import asyncio
 import logging
 import base64
@@ -31,8 +31,6 @@ load_dotenv()
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
 WEBAPP_URL = 'https://jump-cyborg.vercel.app/'
-CHANNEL_ID = os.getenv('CHANNEL_ID', '-1001234567890')  # Замените на реальный chat_id канала
-CHANNEL_INVITE_LINK = 'https://t.me/+XhhH8BjiTSM5NjMy'
 
 # Проверка, что токены загружены
 if not BOT_TOKEN:
@@ -41,11 +39,9 @@ if not BOT_TOKEN:
 if not GITHUB_TOKEN:
     logger.error("GITHUB_TOKEN не указан в переменных окружения")
     raise ValueError("GITHUB_TOKEN не указан")
-if CHANNEL_ID == '-1001234567890':
-    logger.warning("CHANNEL_ID не указан, используйте реальный chat_id канала")
 
 # Конфигурация GitHub
-GITHUB_REPO = 'usedfrom/Jump_cyborg'
+GITHUB_REPO = 'usedfrom/Jump_cyborg'  # Указан ваш реальный репозиторий
 GITHUB_FILE_PATH = 'data/scores.json'
 GITHUB_API_URL = f'https://api.github.com/repos/{GITHUB_REPO}/contents/{GITHUB_FILE_PATH}'
 GITHUB_HEADERS = {
@@ -73,6 +69,7 @@ if not validate_github_token():
 
 # Инициализация бота
 try:
+    bot = Bot(token=BOT_TOKEN)
     application = Application.builder().token(BOT_TOKEN).build()
     logger.info("Telegram Bot успешно инициализирован")
 except Exception as e:
@@ -98,7 +95,7 @@ def create_data_folder():
             logger.info("Папка data успешно создана")
             return True
         else:
-            logger.error(f"Ошибка при создании папки data: {response.status_code} {response.text}")
+            logger.error(f"Ошибка при создании пакпи data: {response.status_code} {response.text}")
             return False
     except Exception as e:
         logger.error(f"Ошибка при создании папки data: {e}")
@@ -140,6 +137,7 @@ def get_scores_from_github():
             return scores, file_data['sha']
         elif response.status_code == 404:
             logger.warning("scores.json не найден, создаём новый")
+            # Проверяем существование папки data
             folder_check = requests.get(
                 f'https://api.github.com/repos/{GITHUB_REPO}/contents/data',
                 headers=GITHUB_HEADERS
@@ -181,79 +179,29 @@ def save_scores_to_github(scores, sha):
         logger.error(f"Ошибка при сохранении файла: {e}")
         return None
 
-async def check_subscription(user_id: int) -> bool:
-    """Проверяет, подписан ли пользователь на канал."""
-    try:
-        chat_member = await application.bot.get_chat_member(chat_id=CHANNEL_ID, user_id=user_id)
-        # Проверяем, является ли пользователь участником или администратором
-        status = chat_member.status
-        logger.info(f"Статус пользователя {user_id} в канале {CHANNEL_ID}: {status}")
-        return status in ['member', 'administrator', 'creator']
-    except TelegramError as e:
-        logger.error(f"Ошибка проверки подписки для user_id {user_id}: {e}")
-        return False
-
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработчик команды /start. Проверяет подписку и показывает кнопки."""
-    user = update.effective_user
-    logger.info(f"Команда /start от пользователя {user.id} ({user.username})")
-    
-    # Проверяем подписку
-    is_subscribed = await check_subscription(user.id)
-    
-    if not is_subscribed:
-        keyboard = [[InlineKeyboardButton("Подписаться на канал", url=CHANNEL_INVITE_LINK)]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_text(
-            "Чтобы начать играть, подпишись на наш канал!\n"
-            "После подписки снова отправь /start.",
-            reply_markup=reply_markup
-        )
-        logger.info(f"Пользователь {user.id} не подписан, отправлено приглашение")
-        return
-    
-    # Если подписан, показываем кнопки
-    keyboard = [
-        [
-            InlineKeyboardButton(
-                "Играть",
-                web_app=WebAppInfo(url=WEBAPP_URL)
-            ),
-            InlineKeyboardButton(
-                "Доска Лидеров",
-                callback_data="leaderboard"
-            ),
-        ]
-    ]
+    logger.info(f"Команда /start от пользователя {update.effective_user.id}")
+    keyboard = [[InlineKeyboardButton("Играть", web_app={'url': WEBAPP_URL})]]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    await update.message.reply_text(
-        f"Привет, {user.first_name}! Добро пожаловать в Jump Cyborg!\n"
-        "Нажми 'Играть', чтобы начать, или 'Доска Лидеров', чтобы увидеть топ игроков.",
-        reply_markup=reply_markup
-    )
-    logger.info("Кнопки 'Играть' и 'Доска Лидеров' отправлены")
+    await update.message.reply_text('Нажми "Играть", чтобы начать!', reply_markup=reply_markup)
+    logger.info("Кнопка 'Играть' отправлена")
 
-async def leaderboard_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработчик нажатия кнопки 'Доска Лидеров'."""
-    query = update.callback_query
-    user = update.effective_user
-    logger.info(f"Пользователь {user.id} ({user.username}) запросил лидерборд")
-    
-    await query.answer()
-    
+async def top(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info(f"Команда /top от пользователя {update.effective_user.id}")
     try:
         scores, _ = get_scores_from_github()
-        logger.info(f"Получено {len(scores)} записей для лидерборда")
+        logger.info(f"Получено {len(scores)} записей для /top")
         
-        top_scores = sorted(scores, key=lambda x: x['score'], reverse=True)[:5]
+        top_scores = sorted(scores, key=lambda x: x['score'], reverse=True)[:10]
         
-        user_score = next((entry['score'] for entry in scores if entry['user_id'] == user.id), None)
+        user_id = update.effective_user.id
+        user_score = next((entry['score'] for entry in scores if entry['user_id'] == user_id), None)
+        
         user_rank = None
         if user_score is not None:
             user_rank = sum(1 for entry in scores if entry['score'] > user_score) + 1
         
-        message = '🏆 Таблица лидеров (Топ-5):\n\n'
+        message = '🏆 Таблица лидеров:\n'
         if top_scores:
             for i, entry in enumerate(top_scores, 1):
                 username = entry['username'].replace('_', '\\_').replace('*', '\\*').replace('`', '\\`').replace('[', '\\[')
@@ -266,31 +214,29 @@ async def leaderboard_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         else:
             message += '\nУ вас пока нет результатов.'
         
-        await query.message.reply_text(message, parse_mode='MarkdownV2')
+        await update.message.reply_text(message, parse_mode='MarkdownV2')
         logger.info("Таблица лидеров отправлена")
     except Exception as e:
-        logger.error(f"Ошибка при загрузке лидерборда: {e}")
-        await query.message.reply_text('Ошибка загрузки лидерборда. Попробуйте позже.')
+        logger.error(f"Ошибка при /top: {e}")
+        await update.message.reply_text('Ошибка загрузки лидерборда. Попробуйте позже.')
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработчик команды /help."""
     logger.info(f"Команда /help от пользователя {update.effective_user.id}")
     message = (
         "🎮 *JumpBot* — бот для игры Jump Cyborg!\n\n"
         "Доступные команды:\n"
-        "/start — Показать кнопки для игры и лидерборда (требуется подписка на канал).\n"
+        "/start — Начать игру, открывает ссылку на игру.\n"
+        "/top — Показать таблицу лидеров (топ-10 игроков).\n"
         "/help — Показать это сообщение.\n\n"
-        f"Играйте на: {WEBAPP_URL}\n"
-        f"Подпишитесь на канал: {CHANNEL_INVITE_LINK}"
+        f"Играйте на: {WEBAPP_URL}"
     )
     await update.message.reply_text(message, parse_mode='MarkdownV2')
     logger.info("Сообщение /help отправлено")
 
 @app.route('/webhook', methods=['POST'])
 async def webhook():
-    """Обработчик вебхука для Telegram-бота."""
     try:
-        update = Update.de_json(request.get_json(), application.bot)
+        update = Update.de_json(request.get_json(), bot)
         await application.process_update(update)
         return jsonify({'status': 'OK'})
     except Exception as e:
@@ -299,7 +245,6 @@ async def webhook():
 
 @app.route('/save_score', methods=['POST'])
 def save_score():
-    """Эндпоинт для сохранения счёта игрока."""
     data = request.get_json()
     logger.info(f"Запрос /save_score: {json.dumps(data, indent=2)}")
     if not data or 'user_id' not in data or 'username' not in data or 'score' not in data:
@@ -313,9 +258,11 @@ def save_score():
     try:
         scores, sha = get_scores_from_github()
         
+        # Проверяем, существует ли пользователь
         existing_entry = next((entry for entry in scores if entry['user_id'] == user_id), None)
         
         if existing_entry:
+            # Обновляем только если новый счёт выше
             if score > existing_entry['score']:
                 existing_entry['username'] = username
                 existing_entry['score'] = score
@@ -331,6 +278,7 @@ def save_score():
                 logger.info(f"Счёт не обновлён, текущий выше: user_id={user_id}, текущий={existing_entry['score']}, новый={score}")
                 return jsonify({'status': 'OK', 'message': 'Score not updated, lower than current'})
         else:
+            # Новый пользователь, добавляем счёт
             scores.append({'user_id': user_id, 'username': username, 'score': score})
             logger.info(f"Новый счёт: user_id={user_id}, username={username}, score={score}")
             new_sha = save_scores_to_github(scores, sha)
@@ -346,7 +294,6 @@ def save_score():
 
 @app.route('/get_leaderboard_with_rank', methods=['GET'])
 def get_leaderboard_with_rank():
-    """Эндпоинт для получения лидерборда и ранга пользователя."""
     logger.info("Запрос /get_leaderboard_with_rank")
     user_id = request.args.get('user_id', type=int)
     current_score = request.args.get('score', type=int, default=0)
@@ -356,7 +303,8 @@ def get_leaderboard_with_rank():
         scores, _ = get_scores_from_github()
         logger.info(f"Получено {len(scores)} записей")
         
-        top_scores = sorted(scores, key=lambda x: x['score'], reverse=True)[:5]
+        top_scores = sorted(scores, key=lambda x: x['score'], reverse=True)[:10]
+        logger.info(f"Возвращено топ-10: {json.dumps(top_scores, indent=2)}")
         
         user_rank = None
         if user_id:
@@ -372,28 +320,37 @@ def get_leaderboard_with_rank():
         logger.error(f"Ошибка при /get_leaderboard_with_rank: {e}")
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
-async def set_webhook():
-    """Установка вебхука для Telegram-бота."""
-    webhook_url = os.getenv('WEBHOOK_URL', 'https://jump-cyborg.onrender.com/webhook')
-    try:
-        await application.bot.set_webhook(url=webhook_url)
-        logger.info(f"Webhook установлен: {webhook_url}")
-    except Exception as e:
-        logger.error(f"Ошибка установки webhook: {e}")
-        raise
+async def run_polling_with_retry():
+    max_retries = 5
+    retry_delay = 10  # секунд
+    attempt = 0
+    
+    while attempt < max_retries:
+        try:
+            logger.info(f"Запуск polling, попытка {attempt + 1}")
+            await application.run_polling()
+            logger.info("Polling Telegram Bot успешно запущен")
+            break
+        except Exception as e:
+            attempt += 1
+            logger.error(f"Ошибка при запуске polling (попытка {attempt}): {e}")
+            if attempt < max_retries:
+                logger.info(f"Повторная попытка через {retry_delay} секунд")
+                await asyncio.sleep(retry_delay)
+            else:
+                logger.error("Достигнуто максимальное количество попыток, polling не запущен")
+                raise
 
 def main():
-    """Основная функция для регистрации обработчиков и запуска бота."""
     application.add_handler(CommandHandler('start', start))
-    application.add_handler(CallbackQueryHandler(leaderboard_callback, pattern='leaderboard'))
+    application.add_handler(CommandHandler('top', top))
     application.add_handler(CommandHandler('help', help_command))
     
-    # Запускаем установку вебхука
+    # Запускаем polling в асинхронной задаче
     loop = asyncio.get_event_loop()
-    loop.run_until_complete(set_webhook())
+    loop.create_task(run_polling_with_retry())
 
 if __name__ == '__main__':
-    # Для продакшена используйте gunicorn: `gunicorn -w 4 -k uvicorn.workers.UvicornWorker app:app`
     port = int(os.getenv('PORT', 10000))
     logger.info(f"Запуск Flask сервера на порту {port}")
     app.run(host='0.0.0.0', port=port)
