@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
+from telegram.error import TelegramError
 import os
 import requests
 import json
@@ -30,6 +31,8 @@ load_dotenv()
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
 WEBAPP_URL = 'https://jump-cyborg.vercel.app/'
+CHANNEL_ID = os.getenv('CHANNEL_ID', '-1001234567890')  # Замените на реальный chat_id канала
+CHANNEL_INVITE_LINK = 'https://t.me/+XhhH8BjiTSM5NjMy'
 
 # Проверка, что токены загружены
 if not BOT_TOKEN:
@@ -38,6 +41,8 @@ if not BOT_TOKEN:
 if not GITHUB_TOKEN:
     logger.error("GITHUB_TOKEN не указан в переменных окружения")
     raise ValueError("GITHUB_TOKEN не указан")
+if CHANNEL_ID == '-1001234567890':
+    logger.warning("CHANNEL_ID не указан, используйте реальный chat_id канала")
 
 # Конфигурация GitHub
 GITHUB_REPO = 'usedfrom/Jump_cyborg'
@@ -176,11 +181,38 @@ def save_scores_to_github(scores, sha):
         logger.error(f"Ошибка при сохранении файла: {e}")
         return None
 
+async def check_subscription(user_id: int) -> bool:
+    """Проверяет, подписан ли пользователь на канал."""
+    try:
+        chat_member = await application.bot.get_chat_member(chat_id=CHANNEL_ID, user_id=user_id)
+        # Проверяем, является ли пользователь участником или администратором
+        status = chat_member.status
+        logger.info(f"Статус пользователя {user_id} в канале {CHANNEL_ID}: {status}")
+        return status in ['member', 'administrator', 'creator']
+    except TelegramError as e:
+        logger.error(f"Ошибка проверки подписки для user_id {user_id}: {e}")
+        return False
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработчик команды /start. Показывает кнопки 'Играть' и 'Доска Лидеров'."""
+    """Обработчик команды /start. Проверяет подписку и показывает кнопки."""
     user = update.effective_user
     logger.info(f"Команда /start от пользователя {user.id} ({user.username})")
     
+    # Проверяем подписку
+    is_subscribed = await check_subscription(user.id)
+    
+    if not is_subscribed:
+        keyboard = [[InlineKeyboardButton("Подписаться на канал", url=CHANNEL_INVITE_LINK)]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await update.message.reply_text(
+            "Чтобы начать играть, подпишись на наш канал!\n"
+            "После подписки снова отправь /start.",
+            reply_markup=reply_markup
+        )
+        logger.info(f"Пользователь {user.id} не подписан, отправлено приглашение")
+        return
+    
+    # Если подписан, показываем кнопки
     keyboard = [
         [
             InlineKeyboardButton(
@@ -246,9 +278,10 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = (
         "🎮 *JumpBot* — бот для игры Jump Cyborg!\n\n"
         "Доступные команды:\n"
-        "/start — Показать кнопки для игры и лидерборда.\n"
+        "/start — Показать кнопки для игры и лидерборда (требуется подписка на канал).\n"
         "/help — Показать это сообщение.\n\n"
-        f"Играйте на: {WEBAPP_URL}"
+        f"Играйте на: {WEBAPP_URL}\n"
+        f"Подпишитесь на канал: {CHANNEL_INVITE_LINK}"
     )
     await update.message.reply_text(message, parse_mode='MarkdownV2')
     logger.info("Сообщение /help отправлено")
