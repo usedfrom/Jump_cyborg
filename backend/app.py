@@ -1,11 +1,10 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from telegram import Bot, Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 import os
 import requests
 import json
-import time
 import asyncio
 import logging
 import base64
@@ -41,7 +40,7 @@ if not GITHUB_TOKEN:
     raise ValueError("GITHUB_TOKEN не указан")
 
 # Конфигурация GitHub
-GITHUB_REPO = 'usedfrom/Jump_cyborg'  # Указан ваш реальный репозиторий
+GITHUB_REPO = 'usedfrom/Jump_cyborg'
 GITHUB_FILE_PATH = 'data/scores.json'
 GITHUB_API_URL = f'https://api.github.com/repos/{GITHUB_REPO}/contents/{GITHUB_FILE_PATH}'
 GITHUB_HEADERS = {
@@ -69,7 +68,6 @@ if not validate_github_token():
 
 # Инициализация бота
 try:
-    bot = Bot(token=BOT_TOKEN)
     application = Application.builder().token(BOT_TOKEN).build()
     logger.info("Telegram Bot успешно инициализирован")
 except Exception as e:
@@ -95,7 +93,7 @@ def create_data_folder():
             logger.info("Папка data успешно создана")
             return True
         else:
-            logger.error(f"Ошибка при создании пакпи data: {response.status_code} {response.text}")
+            logger.error(f"Ошибка при создании папки data: {response.status_code} {response.text}")
             return False
     except Exception as e:
         logger.error(f"Ошибка при создании папки data: {e}")
@@ -137,7 +135,6 @@ def get_scores_from_github():
             return scores, file_data['sha']
         elif response.status_code == 404:
             logger.warning("scores.json не найден, создаём новый")
-            # Проверяем существование папки data
             folder_check = requests.get(
                 f'https://api.github.com/repos/{GITHUB_REPO}/contents/data',
                 headers=GITHUB_HEADERS
@@ -180,28 +177,51 @@ def save_scores_to_github(scores, sha):
         return None
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.info(f"Команда /start от пользователя {update.effective_user.id}")
-    keyboard = [[InlineKeyboardButton("Играть", web_app={'url': WEBAPP_URL})]]
+    """Обработчик команды /start. Показывает кнопки 'Играть' и 'Доска Лидеров'."""
+    user = update.effective_user
+    logger.info(f"Команда /start от пользователя {user.id} ({user.username})")
+    
+    keyboard = [
+        [
+            InlineKeyboardButton(
+                "Играть",
+                web_app=WebAppInfo(url=WEBAPP_URL)
+            ),
+            InlineKeyboardButton(
+                "Доска Лидеров",
+                callback_data="leaderboard"
+            ),
+        ]
+    ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text('Нажми "Играть", чтобы начать!', reply_markup=reply_markup)
-    logger.info("Кнопка 'Играть' отправлена")
+    
+    await update.message.reply_text(
+        f"Привет, {user.first_name}! Добро пожаловать в Jump Cyborg!\n"
+        "Нажми 'Играть', чтобы начать, или 'Доска Лидеров', чтобы увидеть топ игроков.",
+        reply_markup=reply_markup
+    )
+    logger.info("Кнопки 'Играть' и 'Доска Лидеров' отправлены")
 
-async def top(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.info(f"Команда /top от пользователя {update.effective_user.id}")
+async def leaderboard_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработчик нажатия кнопки 'Доска Лидеров'."""
+    query = update.callback_query
+    user = update.effective_user
+    logger.info(f"Пользователь {user.id} ({user.username}) запросил лидерборд")
+    
+    await query.answer()
+    
     try:
         scores, _ = get_scores_from_github()
-        logger.info(f"Получено {len(scores)} записей для /top")
+        logger.info(f"Получено {len(scores)} записей для лидерборда")
         
-        top_scores = sorted(scores, key=lambda x: x['score'], reverse=True)[:10]
+        top_scores = sorted(scores, key=lambda x: x['score'], reverse=True)[:5]
         
-        user_id = update.effective_user.id
-        user_score = next((entry['score'] for entry in scores if entry['user_id'] == user_id), None)
-        
+        user_score = next((entry['score'] for entry in scores if entry['user_id'] == user.id), None)
         user_rank = None
         if user_score is not None:
             user_rank = sum(1 for entry in scores if entry['score'] > user_score) + 1
         
-        message = '🏆 Таблица лидеров:\n'
+        message = '🏆 Таблица лидеров (Топ-5):\n\n'
         if top_scores:
             for i, entry in enumerate(top_scores, 1):
                 username = entry['username'].replace('_', '\\_').replace('*', '\\*').replace('`', '\\`').replace('[', '\\[')
@@ -214,19 +234,19 @@ async def top(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             message += '\nУ вас пока нет результатов.'
         
-        await update.message.reply_text(message, parse_mode='MarkdownV2')
+        await query.message.reply_text(message, parse_mode='MarkdownV2')
         logger.info("Таблица лидеров отправлена")
     except Exception as e:
-        logger.error(f"Ошибка при /top: {e}")
-        await update.message.reply_text('Ошибка загрузки лидерборда. Попробуйте позже.')
+        logger.error(f"Ошибка при загрузке лидерборда: {e}")
+        await query.message.reply_text('Ошибка загрузки лидерборда. Попробуйте позже.')
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработчик команды /help."""
     logger.info(f"Команда /help от пользователя {update.effective_user.id}")
     message = (
         "🎮 *JumpBot* — бот для игры Jump Cyborg!\n\n"
         "Доступные команды:\n"
-        "/start — Начать игру, открывает ссылку на игру.\n"
-        "/top — Показать таблицу лидеров (топ-10 игроков).\n"
+        "/start — Показать кнопки для игры и лидерборда.\n"
         "/help — Показать это сообщение.\n\n"
         f"Играйте на: {WEBAPP_URL}"
     )
@@ -235,8 +255,9 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 @app.route('/webhook', methods=['POST'])
 async def webhook():
+    """Обработчик вебхука для Telegram-бота."""
     try:
-        update = Update.de_json(request.get_json(), bot)
+        update = Update.de_json(request.get_json(), application.bot)
         await application.process_update(update)
         return jsonify({'status': 'OK'})
     except Exception as e:
@@ -245,6 +266,7 @@ async def webhook():
 
 @app.route('/save_score', methods=['POST'])
 def save_score():
+    """Эндпоинт для сохранения счёта игрока."""
     data = request.get_json()
     logger.info(f"Запрос /save_score: {json.dumps(data, indent=2)}")
     if not data or 'user_id' not in data or 'username' not in data or 'score' not in data:
@@ -258,11 +280,9 @@ def save_score():
     try:
         scores, sha = get_scores_from_github()
         
-        # Проверяем, существует ли пользователь
         existing_entry = next((entry for entry in scores if entry['user_id'] == user_id), None)
         
         if existing_entry:
-            # Обновляем только если новый счёт выше
             if score > existing_entry['score']:
                 existing_entry['username'] = username
                 existing_entry['score'] = score
@@ -278,7 +298,6 @@ def save_score():
                 logger.info(f"Счёт не обновлён, текущий выше: user_id={user_id}, текущий={existing_entry['score']}, новый={score}")
                 return jsonify({'status': 'OK', 'message': 'Score not updated, lower than current'})
         else:
-            # Новый пользователь, добавляем счёт
             scores.append({'user_id': user_id, 'username': username, 'score': score})
             logger.info(f"Новый счёт: user_id={user_id}, username={username}, score={score}")
             new_sha = save_scores_to_github(scores, sha)
@@ -294,6 +313,7 @@ def save_score():
 
 @app.route('/get_leaderboard_with_rank', methods=['GET'])
 def get_leaderboard_with_rank():
+    """Эндпоинт для получения лидерборда и ранга пользователя."""
     logger.info("Запрос /get_leaderboard_with_rank")
     user_id = request.args.get('user_id', type=int)
     current_score = request.args.get('score', type=int, default=0)
@@ -303,8 +323,7 @@ def get_leaderboard_with_rank():
         scores, _ = get_scores_from_github()
         logger.info(f"Получено {len(scores)} записей")
         
-        top_scores = sorted(scores, key=lambda x: x['score'], reverse=True)[:10]
-        logger.info(f"Возвращено топ-10: {json.dumps(top_scores, indent=2)}")
+        top_scores = sorted(scores, key=lambda x: x['score'], reverse=True)[:5]  # Изменено на топ-5
         
         user_rank = None
         if user_id:
@@ -320,37 +339,31 @@ def get_leaderboard_with_rank():
         logger.error(f"Ошибка при /get_leaderboard_with_rank: {e}")
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
-async def run_polling_with_retry():
-    max_retries = 5
-    retry_delay = 10  # секунд
-    attempt = 0
-    
-    while attempt < max_retries:
-        try:
-            logger.info(f"Запуск polling, попытка {attempt + 1}")
-            await application.run_polling()
-            logger.info("Polling Telegram Bot успешно запущен")
-            break
-        except Exception as e:
-            attempt += 1
-            logger.error(f"Ошибка при запуске polling (попытка {attempt}): {e}")
-            if attempt < max_retries:
-                logger.info(f"Повторная попытка через {retry_delay} секунд")
-                await asyncio.sleep(retry_delay)
-            else:
-                logger.error("Достигнуто максимальное количество попыток, polling не запущен")
-                raise
+async def set_webhook():
+    """Установка вебхука для Telegram-бота."""
+    webhook_url = os.getenv('WEBHOOK_URL', f'https://jump-cyborg.onrender.com/webhook')
+    try:
+        await application.bot.set_webhook(url=webhook_url)
+        logger.info(f"Webhook установлен: {webhook_url}")
+    except Exception as e:
+        logger.error(f"Ошибка установки webhook: {e}")
+        raise
 
 def main():
+    """Основная функция для регистрации обработчиков и запуска бота."""
     application.add_handler(CommandHandler('start', start))
-    application.add_handler(CommandHandler('top', top))
+    application.add_handler(CallbackQueryHandler(leaderboard_callback, pattern='leaderboard'))
     application.add_handler(CommandHandler('help', help_command))
     
-    # Запускаем polling в асинхронной задаче
-    loop = asyncio.get_event_loop()
-    loop.create_task(run_polling_with_retry())
+    # Запускаем установку вебхука
+    asyncio.get_event_loop().run_until_complete(set_webhook())
+    
+    # Запускаем Flask-сервер
+    port = int(os.getenv('PORT', 10000))
+    logger.info(f"Запуск Flask сервера на порту {port}")
+    app.run(host='0.0.0.0', port=port)
 
 if __name__ == '__main__':
-    port = int(os.getenv('PORT', 10000))
+    main()
     logger.info(f"Запуск Flask сервера на порту {port}")
     app.run(host='0.0.0.0', port=port)
