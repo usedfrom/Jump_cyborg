@@ -295,6 +295,85 @@
             font-weight: bold;
         }
 
+        #leaderboard-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(18, 18, 18, 0.9);
+            color: #E0E0E0;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 300;
+            animation: fadeIn 0.5s ease-in;
+        }
+
+        #leaderboard-modal h2 {
+            font-size: 36px;
+            margin-bottom: 20px;
+            text-shadow: 0 0 10px #FF5722;
+        }
+
+        #leaderboard-modal .leaderboard-content {
+            text-align: center;
+            max-width: 300px;
+            background: rgba(33, 33, 33, 0.9);
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+            animation: fadeIn 0.5s ease-in;
+        }
+
+        #leaderboard-modal .leaderboard-content h3 {
+            font-size: 24px;
+            margin-bottom: 10px;
+            color: #FF5722;
+        }
+
+        #leaderboard-modal .leaderboard-content ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        #leaderboard-modal .leaderboard-content li {
+            font-size: 18px;
+            margin: 5px 0;
+            color: #E0E0E0;
+        }
+
+        #leaderboard-modal .leaderboard-content li span.rank {
+            color: #FFCA28;
+            font-weight: bold;
+        }
+
+        #leaderboard-modal .leaderboard-content #modal-player-rank {
+            margin-top: 10px;
+            font-size: 18px;
+            color: #4CAF50;
+            font-weight: bold;
+        }
+
+        #close-leaderboard {
+            padding: 15px 30px;
+            font-size: 20px;
+            background: linear-gradient(45deg, #FF5722, #FF9800);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            margin-top: 20px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        #close-leaderboard:hover {
+            transform: scale(1.05);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+        }
+
         #loading-indicator {
             display: none;
             flex-direction: column;
@@ -336,6 +415,13 @@
                 padding: 12px 24px;
                 font-size: 18px;
             }
+            #leaderboard-modal h2 {
+                font-size: 28px;
+            }
+            #close-leaderboard {
+                padding: 12px 24px;
+                font-size: 18px;
+            }
             #gyro-message {
                 font-size: 18px;
                 max-width: 250px;
@@ -348,6 +434,7 @@
     <div id="welcome-screen">
         <h1>Jump Cyborg</h1>
         <button id="start-game" class="button">Начать игру</button>
+        <button id="show-leaderboard" class="button">Доска лидеров</button>
     </div>
     <div id="game-container">
         <div id="character" class="facing-right"></div>
@@ -366,6 +453,19 @@
                 <p id="player-rank"></p>
             </div>
             <button id="restart">Играть снова</button>
+        </div>
+        <div id="leaderboard-modal">
+            <h2>Доска лидеров</h2>
+            <div class="leaderboard-content">
+                <h3>Топ-10 игроков</h3>
+                <div id="loading-indicator">
+                    <div class="spinner"></div>
+                    <span>Загрузка...</span>
+                </div>
+                <ul id="modal-leaderboard-list"></ul>
+                <p id="modal-player-rank"></p>
+            </div>
+            <button id="close-leaderboard">Закрыть</button>
         </div>
     </div>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
@@ -425,6 +525,7 @@
             const gameContainer = document.getElementById('game-container');
             const welcomeScreen = document.getElementById('welcome-screen');
             const startGameButton = document.getElementById('start-game');
+            const showLeaderboardButton = document.getElementById('show-leaderboard');
             const scoreElement = document.getElementById('score');
             const highScoreElement = document.getElementById('high-score-value');
             const gameOverScreen = document.getElementById('game-over');
@@ -432,6 +533,10 @@
             const restartButton = document.getElementById('restart');
             const leaderboardList = document.getElementById('leaderboard-list');
             const playerRankElement = document.getElementById('player-rank');
+            const leaderboardModal = document.getElementById('leaderboard-modal');
+            const modalLeaderboardList = document.getElementById('modal-leaderboard-list');
+            const modalPlayerRankElement = document.getElementById('modal-player-rank');
+            const closeLeaderboardButton = document.getElementById('close-leaderboard');
 
             const settings = {
                 sensitivity: 0.3,
@@ -515,6 +620,19 @@
                             gameContainer.style.display = 'block';
                             startGame();
                         });
+                        showLeaderboardButton.addEventListener('click', () => {
+                            console.log('Кнопка "Доска лидеров" нажата');
+                            if (!user || !user.id) {
+                                console.error('Пользователь не авторизован для лидерборда');
+                                alert(`Пожалуйста, откройте игру через Telegram-бот ${settings.botUsername}`);
+                                return;
+                            }
+                            console.log('Открываем модальное окно лидерборда');
+                            welcomeScreen.style.display = 'none';
+                            leaderboardModal.style.display = 'flex';
+                            fetchLeaderboard(user.id, score, 'modal');
+                            startLeaderboardPolling('modal', user.id, score);
+                        });
                     } else {
                         console.error('Пользователь не авторизован через Telegram WebApp');
                         const errorMessage = document.createElement('div');
@@ -531,6 +649,13 @@
                     document.body.appendChild(errorMessage);
                     welcomeScreen.style.display = 'none';
                 }
+
+                closeLeaderboardButton.addEventListener('click', () => {
+                    console.log('Кнопка "Закрыть лидерборд" нажата');
+                    leaderboardModal.style.display = 'none';
+                    welcomeScreen.style.display = 'flex';
+                    stopLeaderboardPolling();
+                });
             }
 
             async function fetchWithRetry(url, retries = 5, delay = 1000) {
@@ -553,18 +678,18 @@
                 throw new Error('Не удалось выполнить запрос после всех попыток');
             }
 
-            async function fetchLeaderboard(userId, currentScore) {
-                const listElement = leaderboardList;
-                const rankElement = playerRankElement;
+            async function fetchLeaderboard(userId, currentScore, target = 'game-over') {
+                const listElement = target === 'game-over' ? leaderboardList : modalLeaderboardList;
+                const rankElement = target === 'game-over' ? playerRankElement : modalPlayerRankElement;
                 const loadingIndicator = listElement.parentElement.querySelector('#loading-indicator');
                 
                 try {
-                    console.log(`Запрос лидерборда: user_id=${userId}, score=${currentScore}`);
+                    console.log(`Запрос лидерборда (${target}): user_id=${userId}, score=${currentScore}`);
                     loadingIndicator.style.display = 'flex';
                     listElement.style.display = 'none';
                     const url = userId ? `${settings.leaderboardUrl}?user_id=${userId}&score=${currentScore}` : settings.leaderboardUrl;
                     const data = await fetchWithRetry(url);
-                    console.log(`Ответ лидерборда:`, JSON.stringify(data, null, 2));
+                    console.log(`Ответ лидерборда (${target}):`, JSON.stringify(data, null, 2));
                     
                     listElement.innerHTML = '';
                     if (data.status === 'OK') {
@@ -572,34 +697,36 @@
                             const li = document.createElement('li');
                             li.textContent = 'Таблица лидеров пуста';
                             listElement.appendChild(li);
-                            console.log(`Лидерборд пуст`);
+                            console.log(`Лидерборд пуст (${target})`);
                         } else {
                             data.leaderboard.slice(0, 10).forEach((entry, index) => {
-                                console.log(`Добавление записи: ${entry.username}, ${entry.score}`);
+                                console.log(`Добавление записи (${target}): ${entry.username}, ${entry.score}`);
                                 const li = document.createElement('li');
                                 li.innerHTML = `<span class="rank">${index + 1}.</span> ${entry.username}: ${entry.score}`;
                                 listElement.appendChild(li);
                             });
-                            const highScoreServer = Math.max(...data.leaderboard.map(entry => entry.score), 0);
-                            if (highScoreServer > highScore) {
-                                highScore = highScoreServer;
-                                localStorage.setItem('highScore', highScore);
-                                highScoreElement.textContent = highScore;
+                            if (target === 'game-over' || target === 'modal') {
+                                const highScoreServer = Math.max(...data.leaderboard.map(entry => entry.score), 0);
+                                if (highScoreServer > highScore) {
+                                    highScore = highScoreServer;
+                                    localStorage.setItem('highScore', highScore);
+                                    highScoreElement.textContent = highScore;
+                                }
+                                console.log(`Обновлён рекорд: ${highScore}`);
                             }
-                            console.log(`Обновлён рекорд: ${highScore}`);
                         }
                         if (data.user_rank) {
                             rankElement.textContent = `Вы на ${data.user_rank} месте с ${data.leaderboard.find(entry => entry.user_id === userId)?.score || currentScore} очками`;
-                            console.log(`Ранг игрока: ${data.user_rank}, счёт: ${data.leaderboard.find(entry => entry.user_id === userId)?.score || currentScore}`);
+                            console.log(`Ранг игрока (${target}): ${data.user_rank}, счёт: ${data.leaderboard.find(entry => entry.user_id === userId)?.score || currentScore}`);
                         } else {
                             rankElement.textContent = 'У вас пока нет результатов';
-                            console.log(`Ранг игрока не определён`);
+                            console.log(`Ранг игрока не определён (${target})`);
                         }
                     } else {
                         throw new Error(data.message || 'Неверный формат ответа');
                     }
                 } catch (error) {
-                    console.error(`Ошибка при загрузке лидерборда: ${error.message}`);
+                    console.error(`Ошибка при загрузке лидерборда (${target}): ${error.message}`);
                     listElement.innerHTML = `<li>Ошибка загрузки: ${error.message}</li>`;
                     rankElement.textContent = '';
                 } finally {
@@ -630,7 +757,7 @@
                     }
                     const result = await response.json();
                     console.log('Результат отправки счёта:', JSON.stringify(result, null, 2));
-                    if (result.status === '"&&quot;OK"&quot;') {
+                    if (result.status === 'OK') {
                         console.log('Счёт успешно сохранён');
                         if (score > highScore) {
                             highScore = score;
@@ -645,16 +772,16 @@
                 }
             }
 
-            function startLeaderboardPolling(userId, score) {
+            function startLeaderboardPolling(target, userId, score) {
                 if (leaderboardInterval) {
                     clearInterval(leaderboardInterval);
                     console.log('Предыдущий polling лидерборда остановлен');
                 }
                 leaderboardInterval = setInterval(() => {
-                    console.log(`Polling: обновление лидерборда`);
-                    fetchLeaderboard(userId, score);
+                    console.log(`Polling: обновление лидерборда (${target})`);
+                    fetchLeaderboard(userId, score, target);
                 }, 10000);
-                console.log(`Polling лидерборда запущен`);
+                console.log(`Polling лидерборда запущен (${target})`);
             }
 
             function stopLeaderboardPolling() {
@@ -688,8 +815,9 @@
 
                 scoreElement.textContent = score;
                 gameOverScreen.style.display = 'none';
-                leaderbordList.innerHTML = '';
+                leaderboardList.innerHTML = '';
                 playerRankElement.textContent = '';
+                leaderboardModal.style.display = 'none';
 
                 stopLeaderboardPolling();
 
@@ -707,8 +835,8 @@
             function createInitialPlatform() {
                 const platform = document.createElement('div');
                 platform.className = 'platform initial-platform';
-                const platformWidth = window.innerWidth; // Устанавливаем ширину на всю ширину экрана
-                const platformX = 0; // Платформа начинается с левого края
+                const platformWidth = 100;
+                const platformX = (window.innerWidth - platformWidth) / 2;
                 const platformY = window.innerHeight - 50;
 
                 platform.style.width = `${platformWidth}px`;
@@ -944,8 +1072,8 @@
                 gameOverScreen.style.display = 'flex';
                 if (user && user.id) {
                     sendScoreToServer(score);
-                    fetchLeaderboard(user.id, score);
-                    startLeaderboardPolling(user.id, score);
+                    fetchLeaderboard(user.id, score, 'game-over');
+                    startLeaderboardPolling('game-over', user.id, score);
                 }
             }
 
@@ -1026,8 +1154,8 @@
                     console.log('Шаг 1: Проверка пользователя');
                     if (user && user.id) {
                         console.log('Пользователь найден, отправка нулевого счёта');
-                        sendScoreToServer(0);
-                        fetchLeaderboard(user.id, 0);
+                        sendScoreToServer(0); // Сохраняем пользователя с нулевым счётом
+                        fetchLeaderboard(user.id, 0, 'modal'); // Загружаем рекорд
                     } else {
                         console.warn('Пользователь не авторизован, продолжаем без сохранения');
                     }
