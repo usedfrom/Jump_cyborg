@@ -323,7 +323,7 @@ def get_leaderboard_with_rank():
         scores, _ = get_scores_from_github()
         logger.info(f"Получено {len(scores)} записей")
         
-        top_scores = sorted(scores, key=lambda x: x['score'], reverse=True)[:5]  # Изменено на топ-5
+        top_scores = sorted(scores, key=lambda x: x['score'], reverse=True)[:5]
         
         user_rank = None
         if user_id:
@@ -341,7 +341,7 @@ def get_leaderboard_with_rank():
 
 async def set_webhook():
     """Установка вебхука для Telegram-бота."""
-    webhook_url = os.getenv('WEBHOOK_URL', f'https://jump-cyborg.onrender.com/webhook')
+    webhook_url = os.getenv('WEBHOOK_URL', 'https://jump-cyborg.onrender.com/webhook')
     try:
         await application.bot.set_webhook(url=webhook_url)
         logger.info(f"Webhook установлен: {webhook_url}")
@@ -356,14 +356,11 @@ def main():
     application.add_handler(CommandHandler('help', help_command))
     
     # Запускаем установку вебхука
-    asyncio.get_event_loop().run_until_complete(set_webhook())
-    
-    # Запускаем Flask-сервер
-    port = int(os.getenv('PORT', 10000))
-    logger.info(f"Запуск Flask сервера на порту {port}")
-    app.run(host='0.0.0.0', port=port)
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(set_webhook())
 
 if __name__ == '__main__':
-    main()
+    # Для продакшена используйте gunicorn: `gunicorn -w 4 -k uvicorn.workers.UvicornWorker app:app`
+    port = int(os.getenv('PORT', 10000))
     logger.info(f"Запуск Flask сервера на порту {port}")
     app.run(host='0.0.0.0', port=port)
