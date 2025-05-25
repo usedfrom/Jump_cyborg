@@ -213,6 +213,11 @@
             z-index: 1000;
             max-width: 300px;
             animation: fadeIn 0.5s ease-in;
+            text-decoration: none;
+        }
+
+        #error-message:hover {
+            color: #FF9800;
         }
 
         #game-over {
@@ -517,16 +522,18 @@
                         });
                     } else {
                         console.error('Пользователь не авторизован через Telegram WebApp');
-                        const errorMessage = document.createElement('div');
+                        const errorMessage = document.createElement('a');
                         errorMessage.id = 'error-message';
+                        errorMessage.href = 'https://t.me/Jumping_New_Cyborg_Bot';
                         errorMessage.textContent = `Откройте игру через Telegram-бот ${settings.botUsername}`;
                         document.body.appendChild(errorMessage);
                         welcomeScreen.style.display = 'none';
                     }
                 } else {
                     console.error('Telegram WebApp не доступен');
-                    const errorMessage = document.createElement('div');
+                    const errorMessage = document.createElement('a');
                     errorMessage.id = 'error-message';
+                    errorMessage.href = 'https://t.me/Jumping_New_Cyborg_Bot';
                     errorMessage.textContent = `Откройте игру через Telegram-бот ${settings.botUsername}`;
                     document.body.appendChild(errorMessage);
                     welcomeScreen.style.display = 'none';
