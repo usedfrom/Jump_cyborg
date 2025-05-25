@@ -630,7 +630,7 @@
                     }
                     const result = await response.json();
                     console.log('Результат отправки счёта:', JSON.stringify(result, null, 2));
-                    if (result.status === 'OK') {
+                    if (result.status === '"&&quot;OK"&quot;') {
                         console.log('Счёт успешно сохранён');
                         if (score > highScore) {
                             highScore = score;
@@ -672,7 +672,7 @@
                 isGameStarted = true;
                 platforms = [];
                 characterX = window.innerWidth / 2 - 20;
-                characterY = window.innerHeight - 400;
+                characterY = window.innerHeight - 100;
                 characterVelocityX = 0;
                 characterVelocityY = 0;
                 cameraY = 0;
@@ -688,7 +688,7 @@
 
                 scoreElement.textContent = score;
                 gameOverScreen.style.display = 'none';
-                leaderboardList.innerHTML = '';
+                leaderbordList.innerHTML = '';
                 playerRankElement.textContent = '';
 
                 stopLeaderboardPolling();
@@ -707,8 +707,8 @@
             function createInitialPlatform() {
                 const platform = document.createElement('div');
                 platform.className = 'platform initial-platform';
-                const platformWidth = 100;
-                const platformX = (window.innerWidth - platformWidth) / 2;
+                const platformWidth = window.innerWidth; // Устанавливаем ширину на всю ширину экрана
+                const platformX = 0; // Платформа начинается с левого края
                 const platformY = window.innerHeight - 50;
 
                 platform.style.width = `${platformWidth}px`;
